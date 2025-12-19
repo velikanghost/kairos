@@ -1,0 +1,26 @@
+{
+  "name": "kairos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kairos - SmartDCA with Predictive Market Intelligence on Monad",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "indexer": "pnpm --filter @kairos/indexer",
+    "agent": "pnpm --filter @kairos/agent",
+    "frontend": "pnpm --filter @kairos/frontend",
+    "dev:indexer": "pnpm --filter @kairos/indexer dev",
+    "dev:agent": "pnpm --filter @kairos/agent dev",
+    "dev:frontend": "pnpm --filter @kairos/frontend dev",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

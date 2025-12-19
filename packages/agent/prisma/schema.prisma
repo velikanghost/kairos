@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model DCAStrategy {
+  id        String   @id @default(uuid())
+  userId    String   // MetaMask address
+  pairId    String   // e.g., "USDC/ETH"
+
+  // Base strategy config
+  frequency String   // 'hourly', 'daily', 'weekly'
+  baseAmount String  // Base amount in wei (as string for BigInt)
+  slippage  Float    @default(0.5) // Slippage tolerance percentage
+
+  // Permission metadata from MetaMask
+  permissionHash String? // Hash of granted permission context
+  permissionExpiry DateTime?
+
+  // Smart features toggles
+  enableSmartSizing Boolean @default(true)
+  enableVolatilityAdjustment Boolean @default(true)
+  enableLiquidityCheck Boolean @default(true)
+
+  // Router preference
+  router String @default("kuru_dex") // 'kuru_dex' | 'uniswap_v4'
+
+  // Status tracking
+  isActive Boolean @default(true)
+  nextCheckTime DateTime
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  executions Execution[]
+
+  @@index([userId])
+  @@index([nextCheckTime])
+  @@index([isActive])
+}
+
+model Execution {
+  id String @id @default(uuid())
+  strategyId String
+  strategy DCAStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  // Decision metadata
+  decision Json // Full ExecutionDecision object
+  recommendedAmount String // Recommended amount in wei
+
+  // Execution status
+  status String // 'pending' | 'sent_to_frontend' | 'executed' | 'skipped' | 'failed'
+  txHash String? // Transaction hash if executed
+  errorMessage String? // Error details if failed
+
+  // Market conditions at time of decision
+  price Float
+  volatility Float
+  liquidityScore Float
+  trend String? // 'bullish' | 'bearish' | 'neutral'
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  executedAt DateTime?
+
+  @@index([strategyId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model MarketSnapshot {
+  id String @id @default(uuid())
+  pairId String
+
+  // Price data
+  price Float
+  sqrtPriceX96 String // Raw price from swap
+
+  // Volume data
+  volume24h Float
+  volumeChange Float // Percentage change
+
+  // Liquidity data
+  totalLiquidity String // Total liquidity in pool
+  liquidityScore Float // Normalized 0-1
+
+  // Computed indicators
+  volatility Float
+  ma7 Float? // 7-period moving average
+  ma30 Float? // 30-period moving average
+  trend String? // 'bullish' | 'bearish' | 'neutral'
+
+  // Block info
+  blockNumber BigInt
+  timestamp DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([pairId])
+  @@index([timestamp])
+  @@unique([pairId, blockNumber])
+}
