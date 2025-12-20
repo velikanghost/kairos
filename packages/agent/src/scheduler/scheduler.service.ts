@@ -53,11 +53,16 @@ export class SchedulerService {
       // Get decision from engine
       const decision = await this.decisionService.shouldExecute(strategy);
 
+      // Serialize decision for JSON storage (convert BigInt to string)
+      const serializedDecision = JSON.parse(JSON.stringify(decision, (_key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+      ));
+
       // Store execution record
       const execution = await this.prisma.execution.create({
         data: {
           strategyId: strategy.id,
-          decision: decision as any, // JSON field
+          decision: serializedDecision, // JSON field
           recommendedAmount: decision.recommendedAmount.toString(),
           status: decision.shouldExecute ? 'pending' : 'skipped',
           price: decision.indicators.price,

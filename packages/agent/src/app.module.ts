@@ -17,6 +17,10 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
+// Token list service
+import { TokenListService } from './common/services/token-list.service';
+import { TokensController } from './common/controllers/tokens.controller';
+
 @Module({
   imports: [
     // Configuration
@@ -36,7 +40,8 @@ import { AppService } from './app.service';
     SchedulerModule,
     NotificationsModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, TokensController],
+  providers: [AppService, TokenListService],
+  exports: [TokenListService],
 })
 export class AppModule {}

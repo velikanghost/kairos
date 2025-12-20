@@ -201,41 +201,90 @@ export class IndexerService {
   }
 
   /**
-   * Get pool liquidity data
+   * Get pool liquidity data from KuruMarginAccount
    */
   async getPoolLiquidity(): Promise<LiquidityData> {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const oneDayAgo = nowSeconds - 86400;
+    const sevenDaysAgo = nowSeconds - 604800;
+
     const query = gql`
-      query GetLiquidity {
-        PoolManager_ModifyLiquidity(
-          limit: 100
-          order_by: { timestamp: desc }
-        ) {
-          liquidityDelta
-          tickLower
-          tickUpper
+      query GetMarginAccountLiquidity {
+        deposits: KuruMarginAccount_Deposit {
+          amount
+          token
+          timestamp
+        }
+        withdrawals: KuruMarginAccount_Withdrawal {
+          amount
+          token
+          timestamp
         }
       }
     `;
 
     try {
       const data: any = await this.client.request(query);
-      const modifications = data.PoolManager_ModifyLiquidity || [];
+      const deposits = data.deposits || [];
+      const withdrawals = data.withdrawals || [];
 
-      // Sum up all liquidity deltas
-      let totalLiquidity = 0n;
-      modifications.forEach((mod: any) => {
-        totalLiquidity += BigInt(mod.liquidityDelta);
-      });
+      this.logger.log(`Retrieved ${deposits.length} deposits and ${withdrawals.length} withdrawals from margin accounts`);
 
-      // Simple liquidity score (can be enhanced)
-      const liquidityScore = totalLiquidity > 0n ? Math.min(1, Number(totalLiquidity) / 1e18) : 0;
+      // Calculate total deposited across all tokens
+      const totalDeposited: bigint = deposits.reduce((sum: bigint, d: any) => {
+        return sum + BigInt(d.amount);
+      }, 0n);
+
+      // Calculate total withdrawn across all tokens
+      const totalWithdrawn: bigint = withdrawals.reduce((sum: bigint, w: any) => {
+        return sum + BigInt(w.amount);
+      }, 0n);
+
+      // Net liquidity = deposits - withdrawals
+      const totalLiquidity: bigint = totalDeposited - totalWithdrawn;
+
+      // Calculate 24h net flow (deposits - withdrawals in last 24h)
+      const deposits24h = deposits.filter((d: any) => parseInt(d.timestamp) >= oneDayAgo);
+      const withdrawals24h = withdrawals.filter((w: any) => parseInt(w.timestamp) >= oneDayAgo);
+
+      const netFlow24h = deposits24h.reduce((sum: bigint, d: any) => sum + BigInt(d.amount), 0n) -
+                         withdrawals24h.reduce((sum: bigint, w: any) => sum + BigInt(w.amount), 0n);
+
+      // Calculate 7d net flow
+      const deposits7d = deposits.filter((d: any) => parseInt(d.timestamp) >= sevenDaysAgo);
+      const withdrawals7d = withdrawals.filter((w: any) => parseInt(w.timestamp) >= sevenDaysAgo);
+
+      const netFlow7d = deposits7d.reduce((sum: bigint, d: any) => sum + BigInt(d.amount), 0n) -
+                        withdrawals7d.reduce((sum: bigint, w: any) => sum + BigInt(w.amount), 0n);
+
+      // Liquidity score: based on flow momentum as percentage of total liquidity
+      // 0.5 = neutral, 1.0 = strong bullish, 0.0 = strong bearish
+      let liquidityScore = 0.5; // Base score (neutral)
+
+      if (totalLiquidity > 0n) {
+        // Calculate flow as percentage of total liquidity
+        const flow24hPercent = (Number(netFlow24h) / Number(totalLiquidity)) * 100;
+        const flow7dPercent = (Number(netFlow7d) / Number(totalLiquidity)) * 100;
+
+        // Each 1% flow change affects score by 0.1
+        // So ±5% flow = ±0.5 score change (full range from 0 to 1)
+        // Weight 24h flow more heavily than 7d
+        const flowImpact = (flow24hPercent * 0.06) + (flow7dPercent * 0.04);
+
+        liquidityScore = 0.5 + flowImpact;
+        liquidityScore = Math.max(0, Math.min(1, liquidityScore)); // Clamp to [0, 1]
+
+        this.logger.log(`Flow analysis - 24h: ${flow24hPercent.toFixed(3)}%, 7d: ${flow7dPercent.toFixed(3)}%, Impact: ${flowImpact.toFixed(4)}`);
+      }
+
+      this.logger.log(`Margin liquidity - Total: ${totalLiquidity.toString()}, 24h flow: ${netFlow24h.toString()}, 7d flow: ${netFlow7d.toString()}, Score: ${liquidityScore.toFixed(4)}`);
 
       return {
         totalLiquidity,
         liquidityScore,
       };
     } catch (error) {
-      this.logger.error(`Error fetching pool liquidity: ${error.message}`);
+      this.logger.error(`Error fetching margin account liquidity: ${error.message}`);
       return { totalLiquidity: 0n, liquidityScore: 0 };
     }
   }
