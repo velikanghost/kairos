@@ -19,12 +19,6 @@ import {
   PositionManager_Subscription,
   PositionManager_Transfer,
   PositionManager_Unsubscription,
-  KuruDexRouter,
-  KuruDexRouter_KuruRouterSwap,
-  KuruDexRouter_MarketRegistered,
-  KuruMarginAccount,
-  KuruMarginAccount_Deposit,
-  KuruMarginAccount_Withdrawal,
 } from "generated";
 
 PoolManager.Approval.handler(async ({ event, context }) => {
@@ -207,69 +201,4 @@ PositionManager.Unsubscription.handler(async ({ event, context }) => {
   };
 
   context.PositionManager_Unsubscription.set(entity);
-});
-
-// Kuru DEX Router handlers
-KuruDexRouter.KuruRouterSwap.handler(async ({ event, context }) => {
-  const entity: KuruDexRouter_KuruRouterSwap = {
-    id: `${event.chainId}_${event.block.number}_${event.logIndex}`,
-    msgSender: event.params.msgSender,
-    debitToken: event.params.debitToken,
-    creditToken: event.params.creditToken,
-    amountIn: event.params.amountIn,
-    amountOut: event.params.amountOut,
-    blockNumber: BigInt(event.block.number),
-    timestamp: BigInt(event.block.timestamp),
-  };
-
-  context.KuruDexRouter_KuruRouterSwap.set(entity);
-});
-
-KuruDexRouter.MarketRegistered.handler(async ({ event, context }) => {
-  const entity: KuruDexRouter_MarketRegistered = {
-    id: `${event.chainId}_${event.block.number}_${event.logIndex}`,
-    baseAsset: event.params.baseAsset,
-    quoteAsset: event.params.quoteAsset,
-    market: event.params.market,
-    vaultAddress: event.params.vaultAddress,
-    pricePrecision: event.params.pricePrecision,
-    sizePrecision: event.params.sizePrecision,
-    tickSize: event.params.tickSize,
-    minSize: event.params.minSize,
-    maxSize: event.params.maxSize,
-    takerFeeBps: event.params.takerFeeBps,
-    makerFeeBps: event.params.makerFeeBps,
-    kuruAmmSpread: event.params.kuruAmmSpread,
-    blockNumber: BigInt(event.block.number),
-    timestamp: BigInt(event.block.timestamp),
-  };
-
-  context.KuruDexRouter_MarketRegistered.set(entity);
-});
-
-// Kuru Margin Account handlers
-KuruMarginAccount.Deposit.handler(async ({ event, context }) => {
-  const entity: KuruMarginAccount_Deposit = {
-    id: `${event.chainId}_${event.block.number}_${event.logIndex}`,
-    owner: event.params.owner,
-    token: event.params.token,
-    amount: event.params.amount,
-    blockNumber: BigInt(event.block.number),
-    timestamp: BigInt(event.block.timestamp),
-  };
-
-  context.KuruMarginAccount_Deposit.set(entity);
-});
-
-KuruMarginAccount.Withdrawal.handler(async ({ event, context }) => {
-  const entity: KuruMarginAccount_Withdrawal = {
-    id: `${event.chainId}_${event.block.number}_${event.logIndex}`,
-    owner: event.params.owner,
-    token: event.params.token,
-    amount: event.params.amount,
-    blockNumber: BigInt(event.block.number),
-    timestamp: BigInt(event.block.timestamp),
-  };
-
-  context.KuruMarginAccount_Withdrawal.set(entity);
 });

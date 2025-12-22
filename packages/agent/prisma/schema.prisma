@@ -9,9 +9,65 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id        String   @id @default(uuid())
+
+  // Web3Auth identifiers
+  web3AuthId String   @unique // Web3Auth verifier ID
+  verifier   String   // Verifier name (e.g., "google", "metamask")
+
+  // User info
+  email      String?
+  name       String?
+
+  // Addresses
+  eoaAddress String?  @unique // EOA address from Web3Auth
+  smartAccountAddress String? @unique // MetaMask Smart Account address
+  smartAccountImplementation String? // 'Hybrid', 'Kernel', etc.
+
+  // Timestamps
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastLoginAt DateTime?
+
+  // Relations
+  permissions Permission[]
+  strategies  DCAStrategy[]
+
+  @@index([web3AuthId])
+  @@index([eoaAddress])
+  @@index([smartAccountAddress])
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Permission details
+  permissionContext String // Serialized permission context (hex string)
+  delegationManager String // DelegationManager contract address
+  permissionType    String // e.g., "native-token-periodic", "erc20-spending-limit"
+
+  // Metadata
+  metadata  Json?    // Additional permission parameters
+
+  // Lifecycle
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model DCAStrategy {
   id        String   @id @default(uuid())
-  userId    String   // MetaMask address
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pairId    String   // e.g., "USDC/ETH"
 
   // Base strategy config

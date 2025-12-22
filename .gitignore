@@ -102,3 +102,6 @@ lib/ocaml/
 
 # Misc
 .cursor/
+example
+ADVANCED_PERMISSIONS_ARCHITECTURE.md
+permissions

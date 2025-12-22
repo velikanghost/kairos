@@ -9,6 +9,7 @@ import { IndicatorsModule } from './indicators/indicators.module';
 import { DecisionModule } from './decision/decision.module';
 
 // Feature modules
+import { AuthModule } from './auth/auth.module';
 import { StrategiesModule } from './strategies/strategies.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -36,6 +37,7 @@ import { TokensController } from './common/controllers/tokens.controller';
     DecisionModule,
 
     // Features
+    AuthModule,
     StrategiesModule,
     SchedulerModule,
     NotificationsModule,
