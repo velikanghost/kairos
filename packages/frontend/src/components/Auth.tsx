@@ -5,6 +5,8 @@ import { metaMask } from "wagmi/connectors";
 import { useSessionAccount } from "@/providers/SessionAccountProvider";
 import { usePermissions } from "@/providers/PermissionProvider";
 import GrantPermissionsButton from "./GrantPermissionsButton";
+import CreateStrategyForm from "./CreateStrategyForm";
+import StrategyList from "./StrategyList";
 
 export function Auth() {
   const { address, chainId: connectedChainId, isConnected } = useAccount();
@@ -12,7 +14,7 @@ export function Auth() {
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
   const currentChainId = useChainId();
-  const { sessionAccount, createSessionAccount, isLoading: sessionLoading, error: sessionError } = useSessionAccount();
+  const { sessionAccountAddress, createSessionAccount, isLoading: sessionLoading, error: sessionError } = useSessionAccount();
   const { permission } = usePermissions();
 
   // Not connected
@@ -61,13 +63,13 @@ export function Auth() {
         </div>
 
         {/* Session Account Info */}
-        {sessionAccount && (
+        {sessionAccountAddress && (
           <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded space-y-2">
             <p className="font-semibold text-blue-800 dark:text-blue-200">
               ✓ Session Account Created
             </p>
             <p className="text-sm">This account will execute trades on your behalf</p>
-            <code className="text-xs break-all block mt-2">{sessionAccount.address}</code>
+            <code className="text-xs break-all block mt-2">{sessionAccountAddress}</code>
           </div>
         )}
 
@@ -92,7 +94,7 @@ export function Auth() {
       {/* Action Buttons */}
       <div className="space-y-3">
         {/* Step 1: Create Session Account */}
-        {!sessionAccount && (
+        {!sessionAccountAddress && (
           <div className="space-y-2">
             <div className="p-3 bg-blue-50 dark:bg-blue-900 rounded text-sm">
               <p className="font-semibold mb-1">Step 1: Create Session Account</p>
@@ -109,21 +111,33 @@ export function Auth() {
         )}
 
         {/* Step 2: Grant Permissions */}
-        {sessionAccount && !permission && (
+        {sessionAccountAddress && !permission && (
           <div className="space-y-2">
             <div className="p-3 bg-green-50 dark:bg-green-900 rounded text-sm">
               <p className="font-semibold mb-1">Step 2: Grant Permissions</p>
-              <p>Allow the session account to execute periodic trades (0.001 ETH/day)</p>
+              <p>Allow the session account to execute periodic trades</p>
             </div>
             <GrantPermissionsButton />
           </div>
         )}
 
-        {/* Step 3: Ready for Trading */}
+        {/* Step 3: Ready for Trading - with option to update permissions */}
         {permission && (
-          <div className="p-3 bg-green-50 dark:bg-green-900 rounded text-sm">
-            <p className="font-semibold mb-1">✓ Ready for DCA Trading!</p>
-            <p>Your session account can now execute automated trades</p>
+          <div className="space-y-2">
+            <div className="p-3 bg-green-50 dark:bg-green-900 rounded text-sm">
+              <p className="font-semibold mb-1">✓ Ready for DCA Trading!</p>
+              <p>Your session account can now execute automated trades</p>
+            </div>
+            <details className="space-y-2">
+              <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 p-2 bg-blue-50 dark:bg-blue-900 rounded">
+                Update Permission Allowance
+              </summary>
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900 rounded text-sm mb-2">
+                <p className="font-semibold mb-1">Update Daily ETH Allowance</p>
+                <p>If you're getting "allowance exceeded" errors, grant a new permission with a higher amount</p>
+              </div>
+              <GrantPermissionsButton />
+            </details>
           </div>
         )}
 
@@ -134,6 +148,14 @@ export function Auth() {
           Disconnect
         </button>
       </div>
+
+      {/* DCA Strategy Management - Only show after permissions granted */}
+      {sessionAccountAddress && permission && (
+        <div className="space-y-6 mt-8 pt-8 border-t">
+          <CreateStrategyForm />
+          <StrategyList />
+        </div>
+      )}
     </div>
   );
 }

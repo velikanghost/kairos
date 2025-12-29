@@ -1,58 +1,89 @@
 "use client";
 
-import {
-  Implementation,
-  MetaMaskSmartAccount,
-  toMetaMaskSmartAccount,
-} from "@metamask/smart-accounts-kit";
-import { createContext, useState, useContext } from "react";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { usePublicClient } from "wagmi";
+import { createContext, useState, useContext, useEffect } from "react";
+import { useAccount } from "wagmi";
 
 interface SessionAccountContext {
-  sessionAccount: MetaMaskSmartAccount | null,
+  sessionAccountAddress: string | null,
   createSessionAccount: () => Promise<void>,
   isLoading: boolean,
   error: string | null,
 }
 
 export const SessionAccountContext = createContext<SessionAccountContext>({
-  sessionAccount: null,
+  sessionAccountAddress: null,
   createSessionAccount: async () => { },
   isLoading: false,
   error: null,
 });
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 export const SessionAccountProvider = ({
   children,
 }: {
   children: React.ReactNode;
 }) => {
-  const [sessionAccount, setSessionAccount] = useState<MetaMaskSmartAccount | null>(null);
+  const [sessionAccountAddress, setSessionAccountAddress] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const publicClient = usePublicClient();
+  const { address: walletAddress } = useAccount();
+
+  // Fetch existing session account on wallet connection
+  useEffect(() => {
+    const fetchExistingSessionAccount = async () => {
+      if (!walletAddress) {
+        setSessionAccountAddress(null);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await fetch(`${BACKEND_URL}/session-accounts/${walletAddress.toLowerCase()}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.address) {
+            setSessionAccountAddress(data.address);
+            console.log('Loaded existing session account:', data.address);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching session account:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchExistingSessionAccount();
+  }, [walletAddress]);
 
   const createSessionAccount = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      if (!publicClient) {
-        throw new Error("Public client not found");
+      if (!walletAddress) {
+        throw new Error("Wallet not connected");
       }
 
-      const account = privateKeyToAccount(generatePrivateKey());
-
-      const newSessionAccount = await toMetaMaskSmartAccount({
-        client: publicClient,
-        implementation: Implementation.Hybrid,
-        deployParams: [account.address, [], [], []],
-        deploySalt: "0x",
-        signer: { account },
+      // Call backend API to create or get session account
+      const response = await fetch(`${BACKEND_URL}/session-accounts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: walletAddress.toLowerCase(), // Use wallet address as userId
+        }),
       });
 
-      setSessionAccount(newSessionAccount);
+      if (!response.ok) {
+        throw new Error(`Failed to create session account: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setSessionAccountAddress(data.address);
     } catch (err) {
       console.error("Error creating a session account:", err);
       setError(err instanceof Error ? err.message : "Failed to create a session account");
@@ -64,7 +95,7 @@ export const SessionAccountProvider = ({
   return (
     <SessionAccountContext.Provider
       value={{
-        sessionAccount,
+        sessionAccountAddress,
         createSessionAccount,
         isLoading,
         error,

@@ -12,18 +12,21 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
 
-  // Web3Auth identifiers
-  web3AuthId String   @unique // Web3Auth verifier ID
-  verifier   String   // Verifier name (e.g., "google", "metamask")
+  // User identifier (wallet address)
+  walletAddress String   @unique // User's wallet address (used as primary identifier)
+
+  // Legacy Web3Auth fields (deprecated, for backwards compatibility)
+  web3AuthId String?   @unique // DEPRECATED: Web3Auth verifier ID
+  verifier   String?   // DEPRECATED: Verifier name
 
   // User info
   email      String?
   name       String?
 
-  // Addresses
-  eoaAddress String?  @unique // EOA address from Web3Auth
-  smartAccountAddress String? @unique // MetaMask Smart Account address
-  smartAccountImplementation String? // 'Hybrid', 'Kernel', etc.
+  // Legacy addresses (deprecated)
+  eoaAddress String?  @unique // DEPRECATED: EOA address from Web3Auth
+  smartAccountAddress String? @unique // DEPRECATED: User's MetaMask Smart Account
+  smartAccountImplementation String? // DEPRECATED: Implementation type
 
   // Timestamps
   createdAt  DateTime @default(now())
@@ -33,10 +36,38 @@ model User {
   // Relations
   permissions Permission[]
   strategies  DCAStrategy[]
+  sessionAccounts SessionAccount[]
 
+  @@index([walletAddress])
   @@index([web3AuthId])
   @@index([eoaAddress])
-  @@index([smartAccountAddress])
+}
+
+model SessionAccount {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Session account address (MetaMask Smart Account)
+  address   String   @unique
+
+  // Encrypted private key (AES-256-GCM encrypted JSON)
+  encryptedPrivateKey String
+
+  // Implementation type
+  implementation String @default("Hybrid") // 'Hybrid', 'Kernel', etc.
+
+  // Lifecycle
+  isActive  Boolean  @default(true)
+  expiresAt DateTime? // Optional expiry for session accounts
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([address])
+  @@index([isActive])
 }
 
 model Permission {
@@ -44,13 +75,18 @@ model Permission {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Permission details
-  permissionContext String // Serialized permission context (hex string)
+  // Session account that will execute using this permission
+  sessionAccountId String
+  sessionAccountAddress String // Denormalized for quick lookups
+
+  // Permission details from ERC-7715
+  permissionContext String // Unique identifier for this permission grant
   delegationManager String // DelegationManager contract address
   permissionType    String // e.g., "native-token-periodic", "erc20-spending-limit"
+  chainId           Int    // Chain ID where permission is valid
 
-  // Metadata
-  metadata  Json?    // Additional permission parameters
+  // Permission parameters (from ERC-7715 response)
+  permissionData Json   // Full permission object from MetaMask
 
   // Lifecycle
   expiresAt DateTime
@@ -61,6 +97,8 @@ model Permission {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([sessionAccountId])
+  @@index([permissionContext])
   @@index([expiresAt])
 }
 
@@ -71,7 +109,7 @@ model DCAStrategy {
   pairId    String   // e.g., "USDC/ETH"
 
   // Base strategy config
-  frequency String   // 'hourly', 'daily', 'weekly'
+  frequency String   // '5min', 'hourly', 'daily', 'weekly'
   baseAmount String  // Base amount in wei (as string for BigInt)
   slippage  Float    @default(0.5) // Slippage tolerance percentage
 
@@ -84,8 +122,8 @@ model DCAStrategy {
   enableVolatilityAdjustment Boolean @default(true)
   enableLiquidityCheck Boolean @default(true)
 
-  // Router preference
-  router String @default("kuru_dex") // 'kuru_dex' | 'uniswap_v4'
+  // Router preference (Uniswap V4 only)
+  router String @default("uniswap_v4") // 'uniswap_v4'
 
   // Status tracking
   isActive Boolean @default(true)

@@ -16,11 +16,19 @@ export class StrategiesService {
   async create(dto: CreateStrategyDto): Promise<DCAStrategy> {
     this.logger.log(`Creating strategy for user: ${dto.userId}`);
 
+    // Ensure user exists and get their ID
+    // dto.userId is actually the wallet address from the frontend
+    const user = await this.prisma.user.upsert({
+      where: { walletAddress: dto.userId },
+      create: { walletAddress: dto.userId },
+      update: {},
+    });
+
     const nextCheckTime = this.calculateNextCheckTime(dto.frequency);
 
     const strategy = await this.prisma.dCAStrategy.create({
       data: {
-        userId: dto.userId,
+        userId: user.id, // Use the actual User ID (UUID)
         pairId: dto.pairId,
         frequency: dto.frequency,
         baseAmount: dto.baseAmount,
@@ -30,7 +38,7 @@ export class StrategiesService {
         enableSmartSizing: dto.enableSmartSizing ?? true,
         enableVolatilityAdjustment: dto.enableVolatilityAdjustment ?? true,
         enableLiquidityCheck: dto.enableLiquidityCheck ?? true,
-        router: dto.router ?? 'kuru_dex',
+        router: dto.router ?? 'uniswap_v4',
         nextCheckTime,
       },
     });
@@ -41,10 +49,20 @@ export class StrategiesService {
 
   /**
    * Get all strategies for a user
+   * @param walletAddress - The user's wallet address
    */
-  async findByUser(userId: string): Promise<DCAStrategy[]> {
+  async findByUser(walletAddress: string): Promise<DCAStrategy[]> {
+    // Find user by wallet address first
+    const user = await this.prisma.user.findUnique({
+      where: { walletAddress },
+    });
+
+    if (!user) {
+      return []; // No user = no strategies
+    }
+
     return this.prisma.dCAStrategy.findMany({
-      where: { userId },
+      where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -166,6 +184,8 @@ export class StrategiesService {
     const now = new Date();
 
     switch (frequency) {
+      case '5min':
+        return new Date(now.getTime() + 5 * 60 * 1000); // +5 minutes
       case 'hourly':
         return new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
       case 'daily':

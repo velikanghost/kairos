@@ -9,10 +9,12 @@ import { IndicatorsModule } from './indicators/indicators.module';
 import { DecisionModule } from './decision/decision.module';
 
 // Feature modules
-import { AuthModule } from './auth/auth.module';
+import { SessionAccountModule } from './session-account/session-account.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { StrategiesModule } from './strategies/strategies.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ExecutionModule } from './execution/execution.module';
 
 // Original app files
 import { AppController } from './app.controller';
@@ -37,8 +39,10 @@ import { TokensController } from './common/controllers/tokens.controller';
     DecisionModule,
 
     // Features
-    AuthModule,
+    SessionAccountModule,
+    PermissionsModule,
     StrategiesModule,
+    ExecutionModule,
     SchedulerModule,
     NotificationsModule,
   ],

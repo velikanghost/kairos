@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/providers/AppProvider";
+import NotificationToast from "@/components/NotificationToast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,6 +32,7 @@ export default function RootLayout({
         <div className="flex-1">
           <main>
             <AppProvider>
+              <NotificationToast />
               {children}
             </AppProvider>
           </main>

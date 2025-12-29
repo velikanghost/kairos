@@ -13,12 +13,16 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Global validation pipe
+  // Global validation pipe with detailed error logging
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      exceptionFactory: (errors) => {
+        logger.error('Validation failed:', JSON.stringify(errors, null, 2));
+        return new Error(`Validation failed: ${JSON.stringify(errors)}`);
+      },
     }),
   );
 

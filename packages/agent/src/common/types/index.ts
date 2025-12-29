@@ -57,7 +57,7 @@ export interface SwapEvent {
 }
 
 export type FrequencyType = 'hourly' | 'daily' | 'weekly';
-export type RouterType = 'kuru_dex' | 'uniswap_v4';
+export type RouterType = 'uniswap_v4';
 export type ExecutionStatus = 'pending' | 'sent_to_frontend' | 'executed' | 'skipped' | 'failed';
 export type TrendType = 'bullish' | 'bearish' | 'neutral';
 

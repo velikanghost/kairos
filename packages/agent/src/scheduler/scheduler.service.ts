@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { StrategiesService } from '../strategies/strategies.service';
 import { DecisionService } from '../decision/decision.service';
+import { ExecutionService } from '../execution/execution.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DCAStrategy } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -13,6 +14,7 @@ export class SchedulerService {
   constructor(
     private strategiesService: StrategiesService,
     private decisionService: DecisionService,
+    private executionService: ExecutionService,
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
   ) {}
@@ -75,10 +77,11 @@ export class SchedulerService {
       // Update next check time
       await this.strategiesService.updateNextCheckTime(strategy.id, strategy.frequency);
 
-      // If should execute, emit event for WebSocket notification
+      // If should execute, execute the swap via ExecutionService
       if (decision.shouldExecute) {
-        this.logger.log(`Strategy ${strategy.id} should execute - emitting notification`);
+        this.logger.log(`Strategy ${strategy.id} should execute - calling ExecutionService`);
 
+        // Emit event for WebSocket notification (for monitoring)
         this.eventEmitter.emit('execution.ready', {
           executionId: execution.id,
           strategy: {
@@ -92,11 +95,28 @@ export class SchedulerService {
           timestamp: new Date(),
         });
 
-        // Update execution status to sent_to_frontend
-        await this.prisma.execution.update({
-          where: { id: execution.id },
-          data: { status: 'sent_to_frontend' },
-        });
+        // Execute the swap
+        const result = await this.executionService.executeSwap(execution.id);
+
+        if (result.success) {
+          this.logger.log(`✅ Trade executed successfully: ${result.txHash}`);
+
+          // Emit success event
+          this.eventEmitter.emit('execution.completed', {
+            executionId: execution.id,
+            txHash: result.txHash,
+            timestamp: new Date(),
+          });
+        } else {
+          this.logger.error(`❌ Trade execution failed: ${result.error}`);
+
+          // Emit failure event
+          this.eventEmitter.emit('execution.failed', {
+            executionId: execution.id,
+            error: result.error,
+            timestamp: new Date(),
+          });
+        }
       } else {
         this.logger.log(`Strategy ${strategy.id} skipped: ${decision.reason}`);
       }

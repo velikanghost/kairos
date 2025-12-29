@@ -11,7 +11,7 @@ export class CreateStrategyDto {
 
   @IsString()
   @IsNotEmpty()
-  frequency: 'hourly' | 'daily' | 'weekly';
+  frequency: '5min' | 'hourly' | 'daily' | 'weekly';
 
   @IsString()
   @IsNotEmpty()
@@ -45,5 +45,5 @@ export class CreateStrategyDto {
 
   @IsString()
   @IsOptional()
-  router?: 'kuru_dex' | 'uniswap_v4';
+  router?: 'uniswap_v4';
 }

@@ -23,7 +23,14 @@ export function calculateVolatility(prices: number[]): number {
   const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / prices.length;
   const stdDev = Math.sqrt(variance);
 
-  return (stdDev / mean) * 100; // Return as percentage
+  // Log price statistics for debugging
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const cv = (stdDev / mean) * 100;
+
+  console.log(`Volatility calculation: ${prices.length} prices, min=${min.toFixed(2)}, max=${max.toFixed(2)}, mean=${mean.toFixed(2)}, stdDev=${stdDev.toFixed(2)}, CV=${cv.toFixed(2)}%`);
+
+  return cv; // Return as percentage
 }
 
 /**

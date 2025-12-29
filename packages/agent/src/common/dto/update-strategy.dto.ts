@@ -3,7 +3,7 @@ import { IsString, IsNumber, IsOptional, IsBoolean, Min, Max } from 'class-valid
 export class UpdateStrategyDto {
   @IsString()
   @IsOptional()
-  frequency?: 'hourly' | 'daily' | 'weekly';
+  frequency?: '5min' | 'hourly' | 'daily' | 'weekly';
 
   @IsString()
   @IsOptional()
@@ -29,7 +29,7 @@ export class UpdateStrategyDto {
 
   @IsString()
   @IsOptional()
-  router?: 'kuru_dex' | 'uniswap_v4';
+  router?: 'uniswap_v4';
 
   @IsBoolean()
   @IsOptional()

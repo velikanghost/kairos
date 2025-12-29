@@ -105,3 +105,6 @@ lib/ocaml/
 example
 ADVANCED_PERMISSIONS_ARCHITECTURE.md
 permissions
+EXECUTION_IMPROVEMENTS.md
+SESSION_PERSISTENCE.md
+uniswap-v3-sdk-tutorial-ts

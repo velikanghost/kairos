@@ -11,14 +11,21 @@ export default () => ({
   },
 
   blockchain: {
-    chainId: parseInt(process.env.CHAIN_ID || '143', 10),
-    rpcUrl: process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.network',
+    chainId: parseInt(process.env.CHAIN_ID || '11155111', 10),
+    rpcUrl: process.env.SEPOLIA_RPC_URL || 'https://rpc.sepolia.org',
     contracts: {
-      poolManager: process.env.POOL_MANAGER_ADDRESS || '0x188d586Ddcf52439676Ca21A244753fA19F9Ea8e',
-      positionManager: process.env.POSITION_MANAGER_ADDRESS || '0x5b7eC4a94fF9beDb700fb82aB09d5846972F4016',
-      kuruDexRouter: process.env.KURU_DEX_ROUTER_ADDRESS || '0xd651346d7c789536ebf06dc72aE3C8502cd695CC',
-      kuruMarginAccount: process.env.KURU_MARGIN_ACCOUNT_ADDRESS || '0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5',
+      poolManager: process.env.POOL_MANAGER_ADDRESS || '0xE03A1074c86CFeDd5C142C4F04F1a1536e203543',
+      positionManager: process.env.POSITION_MANAGER_ADDRESS || '0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4',
+      universalRouter: process.env.UNIVERSAL_ROUTER_ADDRESS || '0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b',
     },
+  },
+
+  encryption: {
+    secretKey: process.env.ENCRYPTION_SECRET_KEY,
+  },
+
+  pimlico: {
+    apiKey: process.env.PIMLICO_API_KEY,
   },
 
   scheduler: {
