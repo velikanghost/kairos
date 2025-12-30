@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { parseEther, parseUnits } from "viem";
+import { formatErrorMessage } from "@/utils/errorFormatter";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
@@ -77,7 +78,8 @@ export default function CreateStrategyForm() {
       });
     } catch (err) {
       console.error("Error creating strategy:", err);
-      setError(err instanceof Error ? err.message : "Failed to create strategy");
+      const errorMsg = err instanceof Error ? err.message : "Failed to create strategy";
+      setError(formatErrorMessage(errorMsg));
     } finally {
       setIsLoading(false);
     }

@@ -6,6 +6,7 @@ import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import { useSessionAccount } from "@/providers/SessionAccountProvider";
 import { usePermissions } from "@/providers/PermissionProvider";
 import { useAccount, useChainId, useWalletClient } from "wagmi";
+import { formatErrorMessage } from "@/utils/errorFormatter";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 const USDC_ADDRESS = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"; // USDC on Sepolia
@@ -121,7 +122,8 @@ export default function GrantPermissionsButton() {
       console.log("Permission stored successfully in backend");
     } catch (err) {
       console.error('Error granting permissions:', err);
-      setError(err instanceof Error ? err.message : 'Failed to grant permissions');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to grant permissions';
+      setError(formatErrorMessage(errorMsg));
     } finally {
       setIsLoading(false);
     }

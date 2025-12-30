@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
+import { formatErrorMessage } from "@/utils/errorFormatter";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
@@ -58,7 +59,8 @@ export default function StrategyList() {
         setStrategies(data);
       } catch (err) {
         console.error("Error fetching strategies:", err);
-        setError(err instanceof Error ? err.message : "Failed to fetch strategies");
+        const errorMsg = err instanceof Error ? err.message : "Failed to fetch strategies";
+        setError(formatErrorMessage(errorMsg));
       } finally {
         setIsLoading(false);
       }
@@ -115,7 +117,8 @@ export default function StrategyList() {
       setStrategies(updatedStrategies);
     } catch (err) {
       console.error("Error toggling strategy:", err);
-      alert(err instanceof Error ? err.message : "Failed to toggle strategy");
+      const errorMsg = err instanceof Error ? err.message : "Failed to toggle strategy";
+      alert(formatErrorMessage(errorMsg));
     }
   };
 
@@ -247,7 +250,7 @@ export default function StrategyList() {
                             )}
                             {exec.errorMessage && (
                               <p className="text-xs text-red-600 mt-1">
-                                Error: {exec.errorMessage}
+                                Error: {formatErrorMessage(exec.errorMessage)}
                               </p>
                             )}
                           </div>

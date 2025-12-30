@@ -288,16 +288,20 @@ export class ExecutionService {
     } catch (error) {
       this.logger.error(`Execution failed: ${error.message}`, error.stack);
 
+      // Format error message for user-friendly display
+      const { formatErrorMessage } = await import('../common/error-formatter.js');
+      const friendlyError = formatErrorMessage(error);
+
       // Update execution with error
       await this.prisma.execution.update({
         where: { id: executionId },
         data: {
           status: 'failed',
-          errorMessage: error.message,
+          errorMessage: friendlyError,
         },
       });
 
-      return { success: false, error: error.message };
+      return { success: false, error: friendlyError };
     }
   }
 
