@@ -104,7 +104,7 @@ lib/ocaml/
 .cursor/
 example
 ADVANCED_PERMISSIONS_ARCHITECTURE.md
-permissions
+permissions_ad
 EXECUTION_IMPROVEMENTS.md
 SESSION_PERSISTENCE.md
 uniswap-v3-sdk-tutorial-ts

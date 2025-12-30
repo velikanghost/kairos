@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
-import { parseEther } from "viem";
+import { parseEther, parseUnits } from "viem";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
@@ -13,9 +13,9 @@ export default function CreateStrategyForm() {
   const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
-    pairId: "ETH/USDC",
+    pairId: "USDC/WETH",
     frequency: "hourly" as "hourly" | "daily" | "weekly",
-    baseAmount: "0.001", // ETH
+    baseAmount: "10", // USDC amount to spend per trade
     slippage: 0.5,
   });
 
@@ -32,8 +32,13 @@ export default function CreateStrategyForm() {
     setSuccess(false);
 
     try {
-      // Convert ETH to wei
-      const baseAmountWei = parseEther(formData.baseAmount);
+      // Convert amount based on token type
+      // For USDC-based pairs (USDC/WETH, USDC/ETH), use 6 decimals
+      // For ETH-based pairs (ETH/USDC, WETH/USDC), use 18 decimals
+      const isUsdcBased = formData.pairId.startsWith("USDC/");
+      const baseAmountWei = isUsdcBased
+        ? parseUnits(formData.baseAmount, 6) // USDC has 6 decimals
+        : parseEther(formData.baseAmount); // ETH has 18 decimals
 
       const response = await fetch(`${BACKEND_URL}/strategies`, {
         method: "POST",
@@ -49,7 +54,7 @@ export default function CreateStrategyForm() {
           enableSmartSizing: true,
           enableVolatilityAdjustment: true,
           enableLiquidityCheck: true,
-          router: "uniswap_v4",
+          router: "uniswap_v3", // Updated to V3
         }),
       });
 
@@ -65,9 +70,9 @@ export default function CreateStrategyForm() {
 
       // Reset form
       setFormData({
-        pairId: "ETH/USDC",
+        pairId: "USDC/WETH",
         frequency: "hourly",
-        baseAmount: "0.001",
+        baseAmount: "10",
         slippage: 0.5,
       });
     } catch (err) {
@@ -102,13 +107,27 @@ export default function CreateStrategyForm() {
           </label>
           <select
             value={formData.pairId}
-            onChange={(e) => setFormData({ ...formData, pairId: e.target.value })}
+            onChange={(e) => {
+              const newPairId = e.target.value;
+              const isUsdcBased = newPairId.startsWith("USDC/");
+              setFormData({
+                ...formData,
+                pairId: newPairId,
+                baseAmount: isUsdcBased ? "10" : "0.001" // Adjust default amount based on pair
+              });
+            }}
             className="w-full p-2 border rounded"
           >
-            <option value="ETH/USDC">ETH/USDC</option>
-            <option value="WETH/USDC">WETH/USDC</option>
-            <option value="WETH/DAI">WETH/DAI</option>
+            <option value="USDC/WETH">USDC/WETH (DCA with stablecoin - Recommended)</option>
+            <option value="USDC/ETH">USDC/ETH (DCA with stablecoin)</option>
+            <option value="ETH/USDC">ETH/USDC (Sell ETH for stablecoin)</option>
+            <option value="WETH/USDC">WETH/USDC (Sell WETH for stablecoin)</option>
           </select>
+          <p className="text-xs text-gray-500 mt-1">
+            {formData.pairId.startsWith("USDC/")
+              ? "Using USDC to buy ETH/WETH - ideal for DCA investing"
+              : "Using ETH/WETH to buy USDC - ideal for taking profits"}
+          </p>
         </div>
 
         {/* Frequency */}
@@ -131,19 +150,23 @@ export default function CreateStrategyForm() {
         {/* Base Amount */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            Amount to Buy (ETH)
+            {formData.pairId.startsWith("USDC/")
+              ? `USDC to Spend Per Trade`
+              : `ETH to Spend Per Trade`}
           </label>
           <input
             type="number"
-            step="0.001"
-            min="0.001"
+            step={formData.pairId.startsWith("USDC/") ? "1" : "0.001"}
+            min={formData.pairId.startsWith("USDC/") ? "1" : "0.001"}
             value={formData.baseAmount}
             onChange={(e) => setFormData({ ...formData, baseAmount: e.target.value })}
             className="w-full p-2 border rounded"
-            placeholder="0.001"
+            placeholder={formData.pairId.startsWith("USDC/") ? "10" : "0.001"}
           />
           <p className="text-xs text-gray-500 mt-1">
-            The smart sizing feature may adjust this based on market conditions
+            {formData.pairId.startsWith("USDC/")
+              ? "Amount of USDC to spend buying ETH/WETH each time. Smart sizing may adjust this based on market conditions."
+              : "Amount of ETH to spend each time. Smart sizing may adjust this based on market conditions."}
           </p>
         </div>
 

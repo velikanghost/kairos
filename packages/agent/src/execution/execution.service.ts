@@ -71,12 +71,12 @@ export class ExecutionService {
         throw new Error(`Execution not found: ${executionId}`);
       }
 
-      // 2. Validate permission is still active
-      const permission = await this.validatePermission(
+      // 2. Validate permissions are still active
+      const { ethPermission, usdcPermission } = await this.validatePermission(
         execution.strategy.userId,
       );
-      if (!permission) {
-        throw new Error('No active permission found for user');
+      if (!ethPermission && !usdcPermission) {
+        throw new Error('No active permissions found for user');
       }
 
       // 3. Get session account and decrypt private key
@@ -116,53 +116,144 @@ export class ExecutionService {
         `Smart account address: ${smartAccount.address}`,
       );
 
-      // 6. Get swap parameters
+      // 6. Get swap parameters and determine amount based on pair direction
       const decision = execution.decision as unknown as ExecutionDecision;
-      const amountIn = decision.recommendedAmount;
+      const recommendedAmount = decision.recommendedAmount;
 
-      // 7. STEP 1: Check balance and fund session account if needed
-      // First check if the smart account already has enough ETH
+      // Check if this is a USDC-based pair (USDC/WETH or USDC/ETH)
+      // or an ETH-based pair (ETH/USDC or WETH/USDC)
+      const isUsdcBasedPair = execution.strategy.pairId.startsWith('USDC/');
+
+      let usdcAmount: bigint;
+
+      if (isUsdcBasedPair) {
+        // For USDC-based pairs, the recommendedAmount is already in USDC units (6 decimals)
+        usdcAmount = BigInt(recommendedAmount);
+        this.logger.log(`USDC-based pair detected. Using ${usdcAmount} USDC units (~${Number(usdcAmount) / 1e6} USDC) directly from strategy`);
+      } else {
+        // For ETH-based pairs, convert ETH amount to equivalent USDC amount
+        const ethAmountInWei = recommendedAmount; // Amount in ETH wei (18 decimals)
+        const ethPriceUsd = decision.indicators?.price || 3000; // Default to $3000 if not available
+
+        // Calculate USDC amount: (ETH amount in wei / 10^18) * ETH price * 10^6 (USDC decimals)
+        // Simplified: (ethAmountInWei * ethPriceUsd * 10^6) / 10^18 = (ethAmountInWei * ethPriceUsd) / 10^12
+        usdcAmount = (BigInt(ethAmountInWei) * BigInt(Math.floor(ethPriceUsd))) / BigInt(10 ** 12);
+        this.logger.log(`ETH-based pair detected. Converting ${ethAmountInWei} wei ETH (~${Number(ethAmountInWei) / 1e18} ETH) to ${usdcAmount} USDC units (~${Number(usdcAmount) / 1e6} USDC) at $${ethPriceUsd}/ETH`);
+      }
+
+      // 7. STEP 1: Check ETH balance for gas (we don't need ETH for the swap itself)
+      // The swap will use USDC, but we need ETH for gas fees
       const currentBalance = await publicClient.getBalance({
         address: smartAccount.address,
       });
 
       this.logger.log(`Current smart account balance: ${currentBalance} wei (${Number(currentBalance) / 1e18} ETH)`);
 
-      // Calculate total needed (swap amount + gas buffer)
-      const gasBuffer = BigInt(1000000000000000); // 0.001 ETH for gas
-      const totalNeeded = BigInt(amountIn) + gasBuffer;
+      // Calculate gas needed (not swap amount, since we're using USDC)
+      const gasBuffer = BigInt(5000000000000000); // 0.005 ETH for gas (UserOp fees)
 
-      this.logger.log(`Total needed for swap: ${totalNeeded} wei (${Number(totalNeeded) / 1e18} ETH)`);
+      this.logger.log(`Gas buffer needed: ${gasBuffer} wei (${Number(gasBuffer) / 1e18} ETH)`);
 
-      // Only fund if balance is insufficient
-      if (currentBalance < totalNeeded) {
-        const fundingAmount = totalNeeded - currentBalance;
-        this.logger.log(`Insufficient balance. Funding ${fundingAmount} wei using delegation...`);
+      // Only fund ETH if balance is insufficient for gas
+      if (currentBalance < gasBuffer) {
+        if (!ethPermission) {
+          throw new Error('No ETH permission found. Cannot fund session account for gas fees.');
+        }
+        const fundingAmount = gasBuffer - currentBalance;
+        this.logger.log(`Insufficient ETH for gas. Funding ${fundingAmount} wei using delegation...`);
 
-        await this.fundSessionAccount(
+        await this.fundSessionAccountWithETH(
           smartAccount,
           fundingAmount,
-          permission,
+          ethPermission,
           publicClient,
         );
 
-        this.logger.log(`Session account funded with ${fundingAmount} wei`);
+        this.logger.log(`Session account funded with ${fundingAmount} wei for gas`);
       } else {
-        this.logger.log(`✅ Sufficient balance already available. Skipping funding step.`);
+        this.logger.log(`✅ Sufficient ETH balance for gas fees. Skipping ETH funding step.`);
       }
 
-      // 8. STEP 2: Wrap ETH to WETH and approve SwapRouter (V3 requirement)
-      await this.wrapAndApproveWETH(
-        smartAccount,
-        amountIn,
-        this.uniswapV3.getWethAddress(),
-        this.uniswapV3.getSwapRouterAddress(),
+      // 8. STEP 2: Transfer USDC from user's EOA to session account using delegation
+      const usdcAddress = this.uniswapV3.getUsdcAddress();
+      const swapRouterAddress = this.uniswapV3.getSwapRouterAddress();
+
+      // Check USDC balance in session account
+      const usdcBalance = await this.getERC20Balance(
+        smartAccount.address,
+        usdcAddress,
+        publicClient,
       );
 
-      // 9. STEP 3: Execute Uniswap V3 swap using session account's own funds (no delegation)
+      this.logger.log(`Session account USDC balance: ${usdcBalance} (${Number(usdcBalance) / 1e6} USDC)`);
+
+      // Transfer USDC from user to session account if needed
+      if (usdcBalance < usdcAmount) {
+        if (!usdcPermission) {
+          throw new Error(
+            `Insufficient USDC balance. Have: ${Number(usdcBalance) / 1e6} USDC, Need: ${Number(usdcAmount) / 1e6} USDC. ` +
+            `No USDC permission found. Please grant ERC-20 token permission for USDC transfers.`
+          );
+        }
+
+        const usdcNeeded = usdcAmount - usdcBalance;
+        this.logger.log(`Need to transfer ${usdcNeeded} USDC (~${Number(usdcNeeded) / 1e6} USDC) from user to session account`);
+
+        // Check user's USDC balance before transfer
+        const userWalletAddress = execution.strategy.user.walletAddress as Address;
+        const userUsdcBalance = await this.getERC20Balance(
+          userWalletAddress,
+          usdcAddress,
+          publicClient,
+        );
+        this.logger.log(`User wallet (${userWalletAddress}) USDC balance: ${userUsdcBalance} (${Number(userUsdcBalance) / 1e6} USDC)`);
+
+        if (userUsdcBalance < usdcNeeded) {
+          throw new Error(
+            `User has insufficient USDC balance. User has: ${Number(userUsdcBalance) / 1e6} USDC, Need: ${Number(usdcNeeded) / 1e6} USDC`
+          );
+        }
+
+        await this.transferUSDCToSessionAccount(
+          smartAccount,
+          usdcNeeded,
+          usdcPermission,
+          usdcAddress,
+          publicClient,
+        );
+
+        this.logger.log(`✅ USDC transfer completed`);
+
+        // Verify session account received the USDC
+        const newUsdcBalance = await this.getERC20Balance(
+          smartAccount.address,
+          usdcAddress,
+          publicClient,
+        );
+        this.logger.log(`Session account USDC balance after transfer: ${newUsdcBalance} (${Number(newUsdcBalance) / 1e6} USDC)`);
+
+        if (newUsdcBalance < usdcAmount) {
+          throw new Error(
+            `USDC transfer failed! Session account has ${Number(newUsdcBalance) / 1e6} USDC but needs ${Number(usdcAmount) / 1e6} USDC`
+          );
+        }
+      } else {
+        this.logger.log(`✅ Sufficient USDC balance for swap. Skipping USDC transfer step.`);
+      }
+
+      // Approve SwapRouter to spend USDC from session account
+      await this.approveToken(
+        smartAccount,
+        usdcAddress,
+        swapRouterAddress,
+        usdcAmount,
+      );
+
+      // 9. STEP 3: Execute Uniswap V3 swap USDC → WETH (buying ETH with stablecoin)
+      // For DCA, the pair should be "USDC/ETH" (swap USDC for ETH)
       const swapTx = await this.uniswapV3.buildSwapCalldata(
-        execution.strategy.pairId,
-        amountIn,
+        'USDC/WETH', // DCA: Use stablecoin to buy ETH
+        usdcAmount,
         execution.strategy.slippage,
       );
 
@@ -212,8 +303,12 @@ export class ExecutionService {
 
   /**
    * Validate that user has an active permission
+   * Returns both ETH permission (for gas) and USDC permission (for DCA swaps)
    */
-  private async validatePermission(userId: string) {
+  private async validatePermission(userId: string): Promise<{
+    ethPermission: any;
+    usdcPermission: any;
+  }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -226,8 +321,8 @@ export class ExecutionService {
       user.walletAddress,
     );
 
-    // Get all active permissions and sort by creation date (newest first)
-    const activePermissions = permissions
+    // Get ETH permission for gas fees
+    const ethPermissions = permissions
       .filter(
         (p) =>
           p.expiresAt > new Date() &&
@@ -236,37 +331,62 @@ export class ExecutionService {
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+    // Get USDC permission for DCA swaps
+    const usdcPermissions = permissions
+      .filter(
+        (p) =>
+          p.expiresAt > new Date() &&
+          !p.revokedAt &&
+          p.permissionType === 'erc20-token-periodic',
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
     // Log all active permissions for debugging
-    this.logger.log(`Found ${activePermissions.length} active permissions for user ${userId}`);
-    activePermissions.forEach((p, idx) => {
+    this.logger.log(`Found ${ethPermissions.length} ETH permissions and ${usdcPermissions.length} USDC permissions for user ${userId}`);
+
+    ethPermissions.forEach((p, idx) => {
       const permData = p.permissionData as any;
       const ethAmount = permData?.permission?.data?.periodAmount || 'unknown';
-      this.logger.log(`  [${idx}] Created: ${p.createdAt.toISOString()}, Amount: ${ethAmount}, ID: ${p.id.substring(0, 8)}`);
+      this.logger.log(`  ETH [${idx}] Created: ${p.createdAt.toISOString()}, Amount: ${ethAmount}, ID: ${p.id.substring(0, 8)}`);
     });
 
-    // Return the most recent permission
-    const selectedPermission = activePermissions[0] || null;
-    if (selectedPermission) {
-      const permData = selectedPermission.permissionData as any;
+    usdcPermissions.forEach((p, idx) => {
+      const permData = p.permissionData as any;
+      const usdcAmount = permData?.permission?.data?.periodAmount || 'unknown';
+      this.logger.log(`  USDC [${idx}] Created: ${p.createdAt.toISOString()}, Amount: ${usdcAmount}, ID: ${p.id.substring(0, 8)}`);
+    });
+
+    // Return the most recent permissions
+    const ethPermission = ethPermissions[0] || null;
+    const usdcPermission = usdcPermissions[0] || null;
+
+    if (ethPermission) {
+      const permData = ethPermission.permissionData as any;
       const ethAmount = permData?.permission?.data?.periodAmount || 'unknown';
-      this.logger.log(`✅ Using permission: ${selectedPermission.id.substring(0, 8)} with ETH amount: ${ethAmount}`);
+      this.logger.log(`✅ Using ETH permission: ${ethPermission.id.substring(0, 8)} with amount: ${ethAmount}`);
     }
 
-    return selectedPermission;
+    if (usdcPermission) {
+      const permData = usdcPermission.permissionData as any;
+      const usdcAmount = permData?.permission?.data?.periodAmount || 'unknown';
+      this.logger.log(`✅ Using USDC permission: ${usdcPermission.id.substring(0, 8)} with amount: ${usdcAmount}`);
+    }
+
+    return { ethPermission, usdcPermission };
   }
 
   /**
    * STEP 1: Fund session account with ETH using ERC-7715 delegation
    * This transfers ETH from the user's account to the session account using native-token-periodic permission
    */
-  private async fundSessionAccount(
+  private async fundSessionAccountWithETH(
     smartAccount: MetaMaskSmartAccount<Implementation>,
     amount: bigint,
     permission: any,
     publicClient: any,
   ): Promise<void> {
     try {
-      this.logger.log(`Funding session account with ${amount} wei using delegation`);
+      this.logger.log(`Funding session account with ${amount} wei ETH using delegation`);
 
       // Get Pimlico configuration
       const pimlicoApiKey = this.config.get('pimlico.apiKey');
@@ -343,8 +463,109 @@ export class ExecutionService {
   }
 
   /**
-   * STEP 2: Execute Uniswap swap using session account's own funds (no delegation)
-   * This calls the PoolManager contract directly from the session account
+   * Transfer USDC from user's wallet to session account using ERC-20 delegation
+   * This uses erc20-token-periodic permission
+   */
+  private async transferUSDCToSessionAccount(
+    smartAccount: MetaMaskSmartAccount<Implementation>,
+    amount: bigint,
+    permission: any,
+    usdcAddress: Address,
+    publicClient: any,
+  ): Promise<void> {
+    try {
+      this.logger.log(`Transferring ${amount} USDC (${Number(amount) / 1e6} USDC) from user wallet to session account using delegation`);
+
+      // Get Pimlico configuration
+      const pimlicoApiKey = this.config.get('pimlico.apiKey');
+
+      if (!pimlicoApiKey) {
+        throw new Error('Pimlico API key not configured');
+      }
+
+      // Create Pimlico client for gas estimation
+      const pimlicoClient = createPimlicoClient({
+        transport: http(
+          `https://api.pimlico.io/v2/${sepolia.id}/rpc?apikey=${pimlicoApiKey}`,
+        ),
+      });
+
+      // Get gas prices from Pimlico
+      const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+
+      this.logger.log(`Gas fees - maxFeePerGas: ${fee.maxFeePerGas}, maxPriorityFeePerGas: ${fee.maxPriorityFeePerGas}`);
+
+      // Create bundler client with ERC-7710 actions for delegation
+      const bundlerClient = createBundlerClient({
+        transport: http(
+          `https://api.pimlico.io/v2/${sepolia.id}/rpc?apikey=${pimlicoApiKey}`,
+          {
+            timeout: 60_000,
+          }
+        ),
+        paymaster: true,
+      }).extend(erc7710BundlerActions()) as any;
+
+      // Extract permission context and delegation manager
+      const permissionData = permission.permissionData as any;
+      const context = permissionData.permissionsContext || permission.permissionContext;
+      const signerMeta = permissionData.signerMeta || {};
+
+      this.logger.log(`Attempting ERC-20 transfer with delegation:`);
+      this.logger.log(`  From: User's EOA wallet`);
+      this.logger.log(`  To: ${smartAccount.address} (session account)`);
+      this.logger.log(`  Token: ${usdcAddress} (USDC)`);
+      this.logger.log(`  Amount: ${amount} (${Number(amount) / 1e6} USDC)`);
+
+      // According to MetaMask docs, for ERC-20 token permissions:
+      // - to: tokenAddress (the ERC-20 contract)
+      // - data: the actual ERC-20 function call (e.g., transfer)
+      const { parseAbi } = await import('viem');
+      const erc20Abi = parseAbi([
+        'function transfer(address to, uint256 amount) returns (bool)',
+      ]);
+
+      const transferData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: [smartAccount.address, amount],
+      });
+
+      this.logger.log(`Encoded transfer calldata: ${transferData}`);
+
+      // Use delegation to transfer USDC from user's wallet to session account
+      const userOpHash = await bundlerClient.sendUserOperationWithDelegation({
+        publicClient,
+        account: smartAccount,
+        calls: [{
+          to: usdcAddress,           // Call the USDC token contract
+          data: transferData,        // transfer(sessionAccount, amount)
+          value: BigInt(0),          // No native ETH
+          permissionsContext: context,
+          delegationManager: signerMeta.delegationManager,
+        }],
+        ...fee,
+        verificationGasLimit: BigInt(500_000),
+        callGasLimit: BigInt(800_000),
+      });
+
+      this.logger.log(`USDC transfer UserOperation submitted: ${userOpHash}`);
+
+      // Wait for confirmation
+      const receipt = await bundlerClient.waitForUserOperationReceipt({
+        hash: userOpHash,
+      });
+
+      this.logger.log(`USDC transfer confirmed in block: ${receipt.receipt.blockNumber}`);
+    } catch (error) {
+      this.logger.error(`Failed to transfer USDC: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * STEP 3: Execute Uniswap swap using session account's own funds (NO delegation)
+   * Session account already has USDC from the transfer step
    */
   private async executeSwapWithSessionAccount(
     smartAccount: MetaMaskSmartAccount<Implementation>,
@@ -353,7 +574,7 @@ export class ExecutionService {
     value: bigint,
   ): Promise<Hash> {
     try {
-      this.logger.log('Executing Uniswap swap with session account funds');
+      this.logger.log('Executing Uniswap swap using session account funds (no delegation needed)');
 
       // Get Pimlico configuration
       const pimlicoApiKey = this.config.get('pimlico.apiKey');
@@ -398,7 +619,7 @@ export class ExecutionService {
       // Import sendUserOperation from viem
       const { sendUserOperation, waitForUserOperationReceipt } = await import('viem/account-abstraction');
 
-      // Send regular UserOperation (no delegation)
+      // Send regular UserOperation (no delegation - session account has its own USDC)
       const userOpHash = await sendUserOperation(bundlerClient, {
         calls: [{
           to,
@@ -406,9 +627,9 @@ export class ExecutionService {
           value,
         }],
         ...fee,
-        // Override gas limits - HybridDeleGator needs more verification gas
-        verificationGasLimit: BigInt(150_000), // Increased from default ~34k
-        callGasLimit: BigInt(300_000), // Swap needs more gas than wrap+approve
+        // Override gas limits for swap
+        verificationGasLimit: BigInt(150_000),
+        callGasLimit: BigInt(300_000),
       });
 
       this.logger.log(`Swap UserOperation submitted: ${userOpHash}`);
@@ -429,17 +650,41 @@ export class ExecutionService {
   }
 
   /**
-   * Wrap ETH to WETH and approve SwapRouter to spend WETH
-   * Required for Uniswap V3 which uses WETH instead of native ETH
+   * Get ERC20 token balance for an address
    */
-  private async wrapAndApproveWETH(
+  private async getERC20Balance(
+    address: Address,
+    tokenAddress: Address,
+    publicClient: any,
+  ): Promise<bigint> {
+    const { parseAbi } = await import('viem');
+
+    const erc20Abi = parseAbi([
+      'function balanceOf(address account) view returns (uint256)',
+    ]);
+
+    const balance = await publicClient.readContract({
+      address: tokenAddress,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+
+    return balance as bigint;
+  }
+
+  /**
+   * Approve SwapRouter to spend tokens from session account
+   * Generic method that works for any ERC20 token
+   */
+  private async approveToken(
     smartAccount: MetaMaskSmartAccount<Implementation>,
+    tokenAddress: Address,
+    spenderAddress: Address,
     amount: bigint,
-    wethAddress: Address,
-    swapRouterAddress: Address,
   ): Promise<void> {
     try {
-      this.logger.log(`Wrapping ${amount} wei ETH to WETH and approving SwapRouter`);
+      this.logger.log(`Approving ${spenderAddress} to spend ${amount} of token ${tokenAddress}`);
 
       // Get Pimlico configuration
       const pimlicoApiKey = this.config.get('pimlico.apiKey');
@@ -447,12 +692,6 @@ export class ExecutionService {
       if (!pimlicoApiKey) {
         throw new Error('Pimlico API key not configured');
       }
-
-      // Create public client for transaction monitoring
-      const publicClient = createPublicClient({
-        chain: sepolia,
-        transport: http(this.config.get('blockchain.rpcUrl')),
-      });
 
       // Create Pimlico client for gas estimation
       const pimlicoClient = createPimlicoClient({
@@ -464,73 +703,56 @@ export class ExecutionService {
       // Get gas prices from Pimlico
       const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
 
-      // Create bundler client with extended timeout for Sepolia
+      // Create bundler client
       const bundlerClient = createBundlerClient({
         account: smartAccount,
         chain: sepolia,
         transport: http(
           `https://api.pimlico.io/v2/${sepolia.id}/rpc?apikey=${pimlicoApiKey}`,
           {
-            timeout: 60_000, // 60 seconds timeout (Sepolia has slower block times)
+            timeout: 60_000,
           }
         ),
       });
 
-      // Import sendUserOperation from viem
+      // Import viem functions
       const { sendUserOperation, waitForUserOperationReceipt } = await import('viem/account-abstraction');
       const { parseAbi } = await import('viem');
 
-      // WETH ABI for deposit and approve
-      const wethAbi = parseAbi([
-        'function deposit() payable',
+      // ERC20 approve ABI
+      const erc20Abi = parseAbi([
         'function approve(address spender, uint256 amount) returns (bool)',
       ]);
 
-      // Encode deposit call
-      const depositData = encodeFunctionData({
-        abi: wethAbi,
-        functionName: 'deposit',
-        args: [],
-      });
-
       // Encode approve call
       const approveData = encodeFunctionData({
-        abi: wethAbi,
+        abi: erc20Abi,
         functionName: 'approve',
-        args: [swapRouterAddress, amount],
+        args: [spenderAddress, amount],
       });
 
-      // Send batch UserOperation: deposit + approve
-      // Set explicit gas limits to avoid AA26 error (verification gas too low)
+      // Send UserOperation to approve
       const userOpHash = await sendUserOperation(bundlerClient, {
-        calls: [
-          {
-            to: wethAddress,
-            data: depositData,
-            value: amount, // Send ETH to wrap
-          },
-          {
-            to: wethAddress,
-            data: approveData,
-            value: BigInt(0),
-          },
-        ],
+        calls: [{
+          to: tokenAddress,
+          data: approveData,
+          value: BigInt(0),
+        }],
         ...fee,
-        // Override gas limits - HybridDeleGator needs more verification gas
-        verificationGasLimit: BigInt(150_000), // Increased from default ~34k
-        callGasLimit: BigInt(200_000), // Sufficient for WETH deposit + approve
+        verificationGasLimit: BigInt(150_000),
+        callGasLimit: BigInt(100_000),
       });
 
-      this.logger.log(`WETH wrap+approve UserOperation submitted: ${userOpHash}`);
+      this.logger.log(`Token approve UserOperation submitted: ${userOpHash}`);
 
-      // Wait for UserOperation to be included on-chain
+      // Wait for confirmation
       const receipt = await waitForUserOperationReceipt(bundlerClient, {
         hash: userOpHash,
       });
 
-      this.logger.log(`WETH wrap+approve confirmed in block: ${receipt.receipt.blockNumber}`);
+      this.logger.log(`Token approve confirmed in block: ${receipt.receipt.blockNumber}`);
     } catch (error) {
-      this.logger.error(`Failed to wrap WETH and approve: ${error.message}`, error.stack);
+      this.logger.error(`Failed to approve token: ${error.message}`, error.stack);
       throw error;
     }
   }

@@ -119,9 +119,17 @@ export default function StrategyList() {
     }
   };
 
-  const formatAmount = (weiAmount: string) => {
-    const eth = Number(weiAmount) / 1e18;
-    return eth.toFixed(6);
+  const formatAmount = (weiAmount: string, pairId: string) => {
+    // For USDC-based pairs (USDC/WETH, USDC/ETH), amount is in USDC (6 decimals)
+    // For ETH-based pairs (ETH/USDC, WETH/USDC), amount is in ETH (18 decimals)
+    const isUsdcBased = pairId.startsWith("USDC/");
+    const decimals = isUsdcBased ? 1e6 : 1e18;
+    const amount = Number(weiAmount) / decimals;
+    return amount.toFixed(isUsdcBased ? 2 : 6);
+  };
+
+  const getAmountLabel = (pairId: string) => {
+    return pairId.startsWith("USDC/") ? "USDC" : "ETH";
   };
 
   const formatDate = (dateString: string) => {
@@ -159,7 +167,7 @@ export default function StrategyList() {
               <div>
                 <h3 className="font-bold text-lg">{strategy.pairId}</h3>
                 <p className="text-sm text-gray-600">
-                  {formatAmount(strategy.baseAmount)} ETH · {strategy.frequency}
+                  {formatAmount(strategy.baseAmount, strategy.pairId)} {getAmountLabel(strategy.pairId)} · {strategy.frequency}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   Next check: {formatDate(strategy.nextCheckTime)}
@@ -219,7 +227,7 @@ export default function StrategyList() {
                               {exec.status}
                             </span>
                             <p className="mt-1">
-                              Amount: {formatAmount(exec.recommendedAmount)} ETH
+                              Amount: {formatAmount(exec.recommendedAmount, strategy.pairId)} {getAmountLabel(strategy.pairId)}
                             </p>
                             <p className="text-xs text-gray-500">
                               Price: ${exec.price.toFixed(2)} · Volatility: {exec.volatility.toFixed(2)}% ·

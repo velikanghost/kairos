@@ -136,4 +136,11 @@ export class UniswapV3Service {
   getSwapRouterAddress(): Address {
     return this.SWAP_ROUTER_ADDRESS;
   }
+
+  /**
+   * Get the USDC address
+   */
+  getUsdcAddress(): Address {
+    return this.USDC;
+  }
 }
