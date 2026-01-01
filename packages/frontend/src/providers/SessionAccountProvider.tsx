@@ -43,9 +43,10 @@ export const SessionAccountProvider = ({
 
         if (response.ok) {
           const data = await response.json();
-          if (data.address) {
-            setSessionAccountAddress(data.address);
-            console.log('Loaded existing session account:', data.address);
+          // Backend returns array of session accounts, get the first active one
+          if (Array.isArray(data) && data.length > 0 && data[0].address) {
+            setSessionAccountAddress(data[0].address);
+            console.log('Loaded existing session account:', data[0].address);
           }
         }
       } catch (err) {
