@@ -1,0 +1,153 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useAccount } from "wagmi";
+import { Activity, Clock, TrendingUp, CheckCircle } from "lucide-react";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+
+interface Stats {
+  totalStrategies: number;
+  activeStrategies: number;
+  totalExecutions: number;
+  successfulExecutions: number;
+  nextExecutionTime?: string;
+}
+
+export default function StatsOverview() {
+  const { address } = useAccount();
+  const [stats, setStats] = useState<Stats>({
+    totalStrategies: 0,
+    activeStrategies: 0,
+    totalExecutions: 0,
+    successfulExecutions: 0,
+  });
+
+  useEffect(() => {
+    if (!address) return;
+
+    const fetchStats = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/strategies/user/${address.toLowerCase()}`);
+        if (!response.ok) return;
+
+        const strategies = await response.json();
+
+        const totalStrategies = strategies.length;
+        const activeStrategies = strategies.filter((s: any) => s.isActive).length;
+
+        // Find next execution time
+        const nextTimes = strategies
+          .filter((s: any) => s.isActive)
+          .map((s: any) => new Date(s.nextCheckTime).getTime())
+          .filter((time: number) => time > Date.now());
+
+        const nextExecutionTime = nextTimes.length > 0
+          ? new Date(Math.min(...nextTimes)).toISOString()
+          : undefined;
+
+        // Fetch execution stats
+        let totalExecutions = 0;
+        let successfulExecutions = 0;
+
+        for (const strategy of strategies) {
+          const execResponse = await fetch(`${BACKEND_URL}/strategies/${strategy.id}/executions`);
+          if (execResponse.ok) {
+            const executions = await execResponse.json();
+            totalExecutions += executions.length;
+            successfulExecutions += executions.filter((e: any) => e.status === "executed").length;
+          }
+        }
+
+        setStats({
+          totalStrategies,
+          activeStrategies,
+          totalExecutions,
+          successfulExecutions,
+          nextExecutionTime,
+        });
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, [address]);
+
+  const formatTimeUntil = (isoTime?: string) => {
+    if (!isoTime) return "No active strategies";
+
+    const now = Date.now();
+    const target = new Date(isoTime).getTime();
+    const diff = target - now;
+
+    if (diff < 0) return "Any moment now";
+
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (minutes === 0) return `${seconds}s`;
+    if (minutes < 60) return `${minutes}m ${seconds}s`;
+
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+  };
+
+  const successRate = stats.totalExecutions > 0
+    ? ((stats.successfulExecutions / stats.totalExecutions) * 100).toFixed(1)
+    : "0";
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Active Strategies */}
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-400">Active Strategies</p>
+          <Activity className="h-5 w-5 text-amber-500" />
+        </div>
+        <p className="mb-1 text-3xl font-bold text-white">
+          {stats.activeStrategies}
+        </p>
+        <p className="text-xs text-gray-500">of {stats.totalStrategies} total</p>
+      </div>
+
+      {/* Next Execution */}
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-400">Next Trade In</p>
+          <Clock className="h-5 w-5 text-amber-500" />
+        </div>
+        <p className="mb-1 text-3xl font-bold text-white">
+          {formatTimeUntil(stats.nextExecutionTime)}
+        </p>
+        <p className="text-xs text-gray-500">Automated execution</p>
+      </div>
+
+      {/* Total Executions */}
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-400">Total Executions</p>
+          <TrendingUp className="h-5 w-5 text-amber-500" />
+        </div>
+        <p className="mb-1 text-3xl font-bold text-white">
+          {stats.totalExecutions}
+        </p>
+        <p className="text-xs text-gray-500">
+          {stats.successfulExecutions} successful
+        </p>
+      </div>
+
+      {/* Success Rate */}
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-gray-400">Success Rate</p>
+          <CheckCircle className="h-5 w-5 text-emerald-400" />
+        </div>
+        <p className="mb-1 text-3xl font-bold text-white">{successRate}%</p>
+        <p className="text-xs text-gray-500">All time</p>
+      </div>
+    </div>
+  );
+}

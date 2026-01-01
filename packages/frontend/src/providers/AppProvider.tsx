@@ -19,7 +19,7 @@ export const wagmiConfig = createConfig({
   multiInjectedProviderDiscovery: false,
   ssr: true,
   transports: {
-    [sepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL),
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
   },
 })
 

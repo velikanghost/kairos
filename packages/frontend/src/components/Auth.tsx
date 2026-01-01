@@ -1,161 +1,184 @@
 'use client'
 
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
-import { metaMask } from "wagmi/connectors";
-import { useSessionAccount } from "@/providers/SessionAccountProvider";
-import { usePermissions } from "@/providers/PermissionProvider";
-import GrantPermissionsButton from "./GrantPermissionsButton";
-import CreateStrategyForm from "./CreateStrategyForm";
-import StrategyList from "./StrategyList";
+import { useAccount, useChainId, useSwitchChain } from 'wagmi'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { useSessionAccount } from '@/providers/SessionAccountProvider'
+import { usePermissions } from '@/providers/PermissionProvider'
+import LandingPage from './LandingPage'
+import GrantPermissionsButton from './GrantPermissionsButton'
+import Header from './Header'
+import { AlertTriangle } from 'lucide-react'
 
 export function Auth() {
-  const { address, chainId: connectedChainId, isConnected } = useAccount();
-  const { connect } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
-  const currentChainId = useChainId();
-  const { sessionAccountAddress, createSessionAccount, isLoading: sessionLoading, error: sessionError } = useSessionAccount();
-  const { permission } = usePermissions();
+  const { address, chainId: connectedChainId, isConnected } = useAccount()
+  const { switchChain } = useSwitchChain()
+  const currentChainId = useChainId()
+  const router = useRouter()
+  const {
+    sessionAccountAddress,
+    createSessionAccount,
+    isLoading: sessionLoading,
+    error: sessionError,
+  } = useSessionAccount()
+  const { permission } = usePermissions()
 
-  // Not connected
+  // Redirect to overview if user has granted permissions (session account will be created automatically)
+  useEffect(() => {
+    if (isConnected && connectedChainId === currentChainId && permission) {
+      router.push('/overview')
+    }
+  }, [isConnected, connectedChainId, currentChainId, permission, router])
+
+  // Not connected - Show landing page
   if (!isConnected) {
-    return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold">Connect Wallet</h2>
-        <button
-          onClick={() => connect({ connector: metaMask() })}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Connect with MetaMask
-        </button>
-      </div>
-    );
+    return <LandingPage />
   }
 
   // Wrong chain
   if (connectedChainId !== currentChainId) {
     return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold">Switch Network</h2>
-        <p className="text-sm text-gray-600">
-          Please switch to Sepolia Testnet to continue
-        </p>
-        <button
-          onClick={() => switchChain({ chainId: currentChainId })}
-          className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
-        >
-          Switch to Sepolia Testnet
-        </button>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#0a0a0f]">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <div className="h-16 w-16 mx-auto bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-amber-400" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white">Wrong Network</h2>
+            <p className="text-gray-400">
+              Please switch to Sepolia Testnet to continue
+            </p>
+          </div>
+
+          <button
+            onClick={() => switchChain({ chainId: currentChainId })}
+            className="w-full px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg transition-colors"
+          >
+            Switch to Sepolia Testnet
+          </button>
+        </div>
       </div>
-    );
+    )
   }
 
-  // Connected and on correct chain
+  // Setup Flow - Only show if not fully configured
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Kairos Trading Agent</h2>
+    <div className="min-h-screen bg-[#0a0a0f]">
+      {/* Minimal Header */}
+      <Header variant="minimal" />
 
-        {/* Wallet Info */}
-        <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded space-y-2">
-          <p><strong>Wallet Address:</strong></p>
-          <code className="text-xs break-all">{address}</code>
+      <main className="max-w-2xl mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-white mb-3">
+            Get Started with Kairos
+          </h2>
+          <p className="text-gray-400">
+            Complete the steps below to start automated trading
+          </p>
         </div>
 
-        {/* Session Account Info */}
-        {sessionAccountAddress && (
-          <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded space-y-2">
-            <p className="font-semibold text-blue-800 dark:text-blue-200">
-              ✓ Session Account Created
-            </p>
-            <p className="text-sm">This account will execute trades on your behalf</p>
-            <code className="text-xs break-all block mt-2">{sessionAccountAddress}</code>
-          </div>
-        )}
-
-        {/* Permission Status */}
-        {permission && (
-          <div className="p-4 bg-green-50 dark:bg-green-900 rounded space-y-2">
-            <p className="font-semibold text-green-800 dark:text-green-200">
-              ✓ Permissions Granted
-            </p>
-            <p className="text-sm">Session account can execute DCA trades with your approval</p>
-          </div>
-        )}
-
-        {/* Errors */}
-        {sessionError && (
-          <div className="p-3 bg-red-100 text-red-700 rounded">
-            {sessionError}
-          </div>
-        )}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="space-y-3">
-        {/* Step 1: Create Session Account */}
-        {!sessionAccountAddress && (
-          <div className="space-y-2">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900 rounded text-sm">
-              <p className="font-semibold mb-1">Step 1: Create Session Account</p>
-              <p>This creates a smart account that will execute trades on your behalf</p>
-            </div>
-            <button
-              onClick={createSessionAccount}
-              disabled={sessionLoading}
-              className="w-full px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
-            >
-              {sessionLoading ? 'Creating Session Account...' : 'Create Session Account'}
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Grant Permissions */}
-        {sessionAccountAddress && !permission && (
-          <div className="space-y-2">
-            <div className="p-3 bg-green-50 dark:bg-green-900 rounded text-sm">
-              <p className="font-semibold mb-1">Step 2: Grant Permissions</p>
-              <p>Allow the session account to execute periodic trades</p>
-            </div>
-            <GrantPermissionsButton />
-          </div>
-        )}
-
-        {/* Step 3: Ready for Trading - with option to update permissions */}
-        {permission && (
-          <div className="space-y-2">
-            <div className="p-3 bg-green-50 dark:bg-green-900 rounded text-sm">
-              <p className="font-semibold mb-1">✓ Ready for DCA Trading!</p>
-              <p>Your session account can now execute automated trades</p>
-            </div>
-            <details className="space-y-2">
-              <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 p-2 bg-blue-50 dark:bg-blue-900 rounded">
-                Update Permission Allowance
-              </summary>
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900 rounded text-sm mb-2">
-                <p className="font-semibold mb-1">Update Daily ETH Allowance</p>
-                <p>If you're getting "allowance exceeded" errors, grant a new permission with a higher amount</p>
+        <div className="space-y-6">
+          {/* Step 1: Create Session Account */}
+          <div
+            className={`border rounded-xl p-8 bg-slate-900/30 ${
+              sessionAccountAddress
+                ? 'border-emerald-500/20 bg-emerald-500/5'
+                : 'border-slate-800/50'
+            }`}
+          >
+            <div className="flex items-start space-x-6">
+              <div
+                className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
+                  sessionAccountAddress
+                    ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                    : 'border-slate-700 bg-slate-900 text-gray-400'
+                }`}
+              >
+                {sessionAccountAddress ? '✓' : '1'}
               </div>
-              <GrantPermissionsButton />
-            </details>
+              <div className="flex-1 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    Create Session Account
+                  </h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">
+                    This creates a smart account that will execute trades on
+                    your behalf
+                  </p>
+                </div>
+                {!sessionAccountAddress && (
+                  <>
+                    <button
+                      onClick={createSessionAccount}
+                      disabled={sessionLoading}
+                      className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {sessionLoading
+                        ? 'Creating...'
+                        : 'Create Session Account'}
+                    </button>
+                    {sessionError && (
+                      <p className="text-sm text-red-400">{sessionError}</p>
+                    )}
+                  </>
+                )}
+                {sessionAccountAddress && (
+                  <p className="text-sm text-emerald-400">
+                    Session account created successfully!
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-        )}
 
-        <button
-          onClick={() => disconnect()}
-          className="w-full px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-        >
-          Disconnect
-        </button>
-      </div>
-
-      {/* DCA Strategy Management - Only show after permissions granted */}
-      {sessionAccountAddress && permission && (
-        <div className="space-y-6 mt-8 pt-8 border-t">
-          <CreateStrategyForm />
-          <StrategyList />
+          {/* Step 2: Grant Permissions */}
+          <div
+            className={`border rounded-xl p-8 bg-slate-900/30 ${
+              permission
+                ? 'border-emerald-500/20 bg-emerald-500/5'
+                : sessionAccountAddress
+                ? 'border-slate-800/50'
+                : 'border-slate-800/30 opacity-50'
+            }`}
+          >
+            <div className="flex items-start space-x-6">
+              <div
+                className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold ${
+                  permission
+                    ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                    : sessionAccountAddress
+                    ? 'border-slate-700 bg-slate-900 text-gray-400'
+                    : 'border-slate-800 bg-slate-950 text-gray-600'
+                }`}
+              >
+                {permission ? '✓' : '2'}
+              </div>
+              <div className="flex-1 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    Grant Permissions
+                  </h3>
+                  <p className="text-sm text-gray-400 leading-relaxed mb-4">
+                    Allow the session account to execute periodic trades
+                  </p>
+                </div>
+                {sessionAccountAddress && !permission && (
+                  <GrantPermissionsButton />
+                )}
+                {permission && (
+                  <p className="text-sm text-emerald-400">
+                    Permissions granted! Redirecting to dashboard...
+                  </p>
+                )}
+                {!sessionAccountAddress && (
+                  <p className="text-sm text-gray-500">Complete step 1 first</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </main>
     </div>
-  );
+  )
 }

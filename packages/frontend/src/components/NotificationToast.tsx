@@ -1,23 +1,24 @@
-"use client";
+'use client'
 
-import { useEffect } from "react";
-import { useNotifications } from "@/providers/NotificationsProvider";
+import { useEffect } from 'react'
+import { useNotifications } from '@/providers/NotificationsProvider'
+import { CheckCircle, XCircle, X } from 'lucide-react'
 
 export default function NotificationToast() {
-  const { notifications, clearNotifications } = useNotifications();
+  const { notifications, clearNotifications } = useNotifications()
 
   // Auto-clear notifications after 10 seconds
   useEffect(() => {
     if (notifications.length > 0) {
       const timer = setTimeout(() => {
-        clearNotifications();
-      }, 10000);
-      return () => clearTimeout(timer);
+        clearNotifications()
+      }, 10000)
+      return () => clearTimeout(timer)
     }
-  }, [notifications, clearNotifications]);
+  }, [notifications, clearNotifications])
 
   if (notifications.length === 0) {
-    return null;
+    return null
   }
 
   return (
@@ -27,28 +28,37 @@ export default function NotificationToast() {
           key={`${notification.executionId}-${index}`}
           className={`p-4 rounded-lg shadow-lg ${
             notification.error
-              ? "bg-red-50 border-2 border-red-500"
-              : "bg-green-50 border-2 border-green-500"
+              ? 'bg-red-50 border-2 border-red-500'
+              : 'bg-green-50 border-2 border-green-500'
           }`}
         >
           <div className="flex items-start">
+            <div className="shrink-0 mr-3">
+              {notification.error ? (
+                <XCircle className="h-5 w-5 text-red-500" />
+              ) : (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              )}
+            </div>
             <div className="flex-1">
               <h3
                 className={`font-semibold ${
-                  notification.error ? "text-red-800" : "text-green-800"
+                  notification.error ? 'text-red-800' : 'text-green-800'
                 }`}
               >
-                {notification.error ? "❌ Execution Failed" : "✅ Execution Successful"}
+                {notification.error
+                  ? 'Execution Failed'
+                  : 'Execution Successful'}
               </h3>
 
               {notification.error && (
                 <div className="mt-2 text-sm text-red-700">
                   <p className="font-medium">Error:</p>
                   <p className="break-words">
-                    {notification.error.includes("transfer-amount-exceeded")
-                      ? "⚠️ Daily ETH allowance exceeded. Please grant more permissions with a higher ETH amount."
-                      : notification.error.includes("invalid-calldata")
-                      ? "⚠️ Invalid transaction. The permission may not allow this type of operation."
+                    {notification.error.includes('transfer-amount-exceeded')
+                      ? '⚠️ Daily ETH allowance exceeded. Please grant more permissions with a higher ETH amount.'
+                      : notification.error.includes('invalid-calldata')
+                      ? '⚠️ Invalid transaction. The permission may not allow this type of operation.'
                       : notification.error}
                   </p>
                 </div>
@@ -75,15 +85,15 @@ export default function NotificationToast() {
 
             <button
               onClick={() => {
-                clearNotifications();
+                clearNotifications()
               }}
               className="ml-4 text-gray-400 hover:text-gray-600"
             >
-              ✕
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       ))}
     </div>
-  );
+  )
 }
