@@ -52,9 +52,9 @@ export class StrategiesService {
    * @param walletAddress - The user's wallet address
    */
   async findByUser(walletAddress: string): Promise<DCAStrategy[]> {
-    // Find user by wallet address first
+    // Find user by wallet address (case-insensitive)
     const user = await this.prisma.user.findUnique({
-      where: { walletAddress },
+      where: { walletAddress: walletAddress.toLowerCase() },
     });
 
     if (!user) {
@@ -168,12 +168,12 @@ export class StrategiesService {
 
   /**
    * Get execution history for a strategy
+   * Returns all executions (no limit)
    */
-  async getExecutions(strategyId: string, limit: number = 50): Promise<Execution[]> {
+  async getExecutions(strategyId: string): Promise<Execution[]> {
     return this.prisma.execution.findMany({
       where: { strategyId },
       orderBy: { createdAt: 'desc' },
-      take: limit,
     });
   }
 

@@ -52,6 +52,18 @@ export class SchedulerService {
     try {
       this.logger.log(`Evaluating strategy: ${strategy.id}`);
 
+      // Check if daily USDC allowance has been exhausted
+      const allowanceCheck = await this.checkDailyAllowance(strategy.userId);
+      if (!allowanceCheck.hasAllowance) {
+        this.logger.warn(
+          `Skipping strategy ${strategy.id}: Daily USDC allowance exhausted. ` +
+          `Spent: ${allowanceCheck.spentToday.toFixed(2)} / ${allowanceCheck.dailyLimit.toFixed(2)}`
+        );
+        // Update next check time to continue checking (allowance resets daily)
+        await this.strategiesService.updateNextCheckTime(strategy.id, strategy.frequency);
+        return;
+      }
+
       // Get decision from engine
       const decision = await this.decisionService.shouldExecute(strategy);
 
@@ -123,6 +135,65 @@ export class SchedulerService {
     } catch (error) {
       this.logger.error(`Error evaluating strategy ${strategy.id}: ${error.message}`, error.stack);
     }
+  }
+
+  /**
+   * Check if user has exceeded their daily USDC allowance
+   */
+  private async checkDailyAllowance(userId: string): Promise<{
+    hasAllowance: boolean;
+    dailyLimit: number;
+    spentToday: number;
+  }> {
+    // Get user's USDC permission (erc20-token-periodic)
+    const permission = await this.prisma.permission.findFirst({
+      where: {
+        userId: userId,
+        permissionType: 'erc20-token-periodic',
+        expiresAt: { gte: new Date() },
+        revokedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!permission) {
+      // No permission = no allowance
+      return { hasAllowance: false, dailyLimit: 0, spentToday: 0 };
+    }
+
+    // Extract daily limit from permission data
+    const permissionData = permission.permissionData as any;
+    const periodAmount = BigInt(permissionData.permission?.data?.periodAmount || '0');
+    const dailyLimit = Number(periodAmount) / 1e6; // Convert from 6 decimals to USDC
+
+    // Get today's start (midnight UTC)
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    // Calculate total USDC spent today across all strategies for this user
+    const strategies = await this.prisma.dCAStrategy.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const strategyIds = strategies.map(s => s.id);
+
+    const todayExecutions = await this.prisma.execution.findMany({
+      where: {
+        strategyId: { in: strategyIds },
+        status: 'executed',
+        executedAt: { gte: todayStart },
+      },
+      select: { recommendedAmount: true },
+    });
+
+    const spentToday = todayExecutions.reduce((sum, exec) => {
+      return sum + Number(exec.recommendedAmount) / 1e6;
+    }, 0);
+
+    const hasAllowance = spentToday < dailyLimit;
+
+    return { hasAllowance, dailyLimit, spentToday };
   }
 
   /**

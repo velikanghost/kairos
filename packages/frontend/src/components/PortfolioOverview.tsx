@@ -76,8 +76,10 @@ export default function PortfolioOverview({
         const wethBalanceFormatted = formatUnits(wethBalance as bigint, 18)
         const usdcBalanceFormatted = formatUnits(usdcBalance as bigint, 6)
 
-        // Fetch ETH price (simplified - you can enhance this)
-        const wethPrice = 2930 // Hardcoded for now, can fetch from oracle
+        // Fetch real-time ETH price from Pyth oracle
+        const priceResponse = await fetch(`${BACKEND_URL}/indexer/price?pairId=WETH-USDC`)
+        const priceData = await priceResponse.json()
+        const wethPrice = priceData.price
 
         // Calculate total invested by summing all successful executions
         const strategiesResponse = await fetch(
@@ -87,6 +89,7 @@ export default function PortfolioOverview({
 
         if (strategiesResponse.ok) {
           const strategies = await strategiesResponse.json()
+          console.log('Total strategies:', strategies.length)
 
           for (const strategy of strategies) {
             const execResponse = await fetch(
@@ -94,17 +97,24 @@ export default function PortfolioOverview({
             )
             if (execResponse.ok) {
               const executions = await execResponse.json()
+              console.log(`Strategy ${strategy.id}: ${executions.length} total executions`)
+
               const successfulExecs = executions.filter(
                 (e: any) => e.status === 'executed',
               )
 
-              // Sum up amounts from successful executions (they're in USDC with 6 decimals)
-              totalInvested += successfulExecs.reduce(
+              // Sum up actual USDC amounts spent from successful executions
+              // Use usdcAmountIn if available (actual amount), otherwise fall back to recommendedAmount
+              const strategyInvested = successfulExecs.reduce(
                 (sum: number, exec: any) => {
-                  return sum + Number(exec.recommendedAmount) / 1e6
+                  const usdcSpent = exec.usdcAmountIn
+                    ? Number(exec.usdcAmountIn) / 1e6
+                    : Number(exec.recommendedAmount) / 1e6
+                  return sum + usdcSpent
                 },
                 0,
               )
+              totalInvested += strategyInvested
             }
           }
         }

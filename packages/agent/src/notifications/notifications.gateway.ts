@@ -64,6 +64,68 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   /**
+   * Listen for execution completed events from scheduler
+   * Broadcasts to user's WebSocket room for real-time UI updates
+   */
+  @OnEvent('execution.completed')
+  async handleExecutionCompletedEvent(data: { executionId: string; txHash: string; timestamp: Date }) {
+    try {
+      // Fetch execution with strategy to get userId
+      const execution = await this.prisma.execution.findUnique({
+        where: { id: data.executionId },
+        include: { strategy: true },
+      });
+
+      if (!execution) {
+        this.logger.warn(`Execution not found: ${data.executionId}`);
+        return;
+      }
+
+      this.logger.log(`Broadcasting execution completed to user: ${execution.strategy.userId}`);
+
+      // Broadcast to user's room
+      this.server.to(`user:${execution.strategy.userId}`).emit('execution:completed', {
+        executionId: data.executionId,
+        txHash: data.txHash,
+        timestamp: data.timestamp,
+      });
+    } catch (error) {
+      this.logger.error(`Error broadcasting execution completed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Listen for execution failed events from scheduler
+   * Broadcasts to user's WebSocket room for real-time UI updates
+   */
+  @OnEvent('execution.failed')
+  async handleExecutionFailedEvent(data: { executionId: string; error: string; timestamp: Date }) {
+    try {
+      // Fetch execution with strategy to get userId
+      const execution = await this.prisma.execution.findUnique({
+        where: { id: data.executionId },
+        include: { strategy: true },
+      });
+
+      if (!execution) {
+        this.logger.warn(`Execution not found: ${data.executionId}`);
+        return;
+      }
+
+      this.logger.log(`Broadcasting execution failed to user: ${execution.strategy.userId}`);
+
+      // Broadcast to user's room
+      this.server.to(`user:${execution.strategy.userId}`).emit('execution:failed', {
+        executionId: data.executionId,
+        error: data.error,
+        timestamp: data.timestamp,
+      });
+    } catch (error) {
+      this.logger.error(`Error broadcasting execution failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Client confirms execution completed
    */
   @SubscribeMessage('execution:completed')

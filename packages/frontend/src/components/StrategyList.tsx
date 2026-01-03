@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { formatErrorMessage } from '@/utils/errorFormatter'
+import { useNotifications } from '@/providers/NotificationsProvider'
 import {
   TrendingUp,
   Clock,
@@ -40,8 +41,9 @@ interface Execution {
   executedAt?: string
 }
 
-export default function StrategyList() {
+export default function StrategyList({ refreshTrigger }: { refreshTrigger?: number }) {
   const { address } = useAccount()
+  const { executionUpdateTrigger } = useNotifications()
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
   const [executions, setExecutions] = useState<Execution[]>([])
@@ -49,45 +51,46 @@ export default function StrategyList() {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch user's strategies
-  useEffect(() => {
+  const fetchStrategies = useCallback(async () => {
     if (!address) return
 
-    const fetchStrategies = async () => {
-      setIsLoading(true)
-      setError(null)
+    setIsLoading(true)
+    setError(null)
 
-      try {
-        const response = await fetch(
-          `${BACKEND_URL}/strategies/user/${address.toLowerCase()}`,
-        )
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/strategies/user/${address.toLowerCase()}`,
+      )
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch strategies')
-        }
-
-        const data = await response.json()
-        setStrategies(data)
-
-        // Auto-expand if there's only one strategy
-        if (data.length === 1) {
-          setSelectedStrategy(data[0].id)
-        }
-      } catch (err) {
-        console.error('Error fetching strategies:', err)
-        const errorMsg =
-          err instanceof Error ? err.message : 'Failed to fetch strategies'
-        setError(formatErrorMessage(errorMsg))
-      } finally {
-        setIsLoading(false)
+      if (!response.ok) {
+        throw new Error('Failed to fetch strategies')
       }
-    }
 
+      const data = await response.json()
+      setStrategies(data)
+
+      // Auto-expand if there's only one strategy
+      if (data.length === 1) {
+        setSelectedStrategy(data[0].id)
+      }
+    } catch (err) {
+      console.error('Error fetching strategies:', err)
+      const errorMsg =
+        err instanceof Error ? err.message : 'Failed to fetch strategies'
+      setError(formatErrorMessage(errorMsg))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [address])
+
+  // Initial fetch + polling + WebSocket trigger
+  useEffect(() => {
     fetchStrategies()
 
     // Refresh every 30 seconds
     const interval = setInterval(fetchStrategies, 30000)
     return () => clearInterval(interval)
-  }, [address])
+  }, [fetchStrategies, executionUpdateTrigger, refreshTrigger])
 
   // Fetch executions for selected strategy
   useEffect(() => {
@@ -115,7 +118,7 @@ export default function StrategyList() {
     // Refresh every 10 seconds
     const interval = setInterval(fetchExecutions, 10000)
     return () => clearInterval(interval)
-  }, [selectedStrategy])
+  }, [selectedStrategy, executionUpdateTrigger])
 
   const toggleStrategy = async (strategyId: string, currentStatus: boolean) => {
     try {

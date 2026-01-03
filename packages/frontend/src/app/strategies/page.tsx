@@ -2,7 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import CreateStrategyForm from "@/components/CreateStrategyForm";
 import StrategyList from "@/components/StrategyList";
@@ -10,12 +10,18 @@ import StrategyList from "@/components/StrategyList";
 export default function StrategiesPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     if (!isConnected) {
       router.push("/");
     }
   }, [isConnected, router]);
+
+  const handleStrategyCreated = () => {
+    // Increment trigger to refresh strategy list
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
   if (!isConnected) {
     return null;
@@ -38,12 +44,12 @@ export default function StrategiesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Create Strategy Form */}
             <div className="lg:col-span-1">
-              <CreateStrategyForm />
+              <CreateStrategyForm onSuccess={handleStrategyCreated} />
             </div>
 
             {/* Strategy List */}
             <div className="lg:col-span-2">
-              <StrategyList />
+              <StrategyList refreshTrigger={refreshTrigger} />
             </div>
           </div>
         </div>

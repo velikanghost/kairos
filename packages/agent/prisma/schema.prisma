@@ -150,6 +150,11 @@ model Execution {
   decision Json // Full ExecutionDecision object
   recommendedAmount String // Recommended amount in wei
 
+  // Actual swap amounts (filled after execution)
+  usdcAmountIn String? // Actual USDC spent (in wei, 6 decimals)
+  wethAmountOut String? // Actual WETH received (in wei, 18 decimals)
+  executionPrice Float? // Actual ETH price at execution (USDC/WETH)
+
   // Execution status
   status String // 'pending' | 'sent_to_frontend' | 'executed' | 'skipped' | 'failed'
   txHash String? // Transaction hash if executed

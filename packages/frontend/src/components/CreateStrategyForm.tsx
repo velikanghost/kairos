@@ -8,7 +8,7 @@ import { Zap } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
-export default function CreateStrategyForm() {
+export default function CreateStrategyForm({ onSuccess }: { onSuccess?: () => void }) {
   const { address } = useAccount();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +66,11 @@ export default function CreateStrategyForm() {
       console.log("Strategy created:", strategy);
 
       setSuccess(true);
+
+      // Call onSuccess callback to refresh strategy list
+      if (onSuccess) {
+        onSuccess();
+      }
 
       // Reset form
       setFormData({

@@ -142,37 +142,42 @@ export class ExecutionService {
       }
 
       // 7. STEP 1: Check ETH balance for gas (we don't need ETH for the swap itself)
-      // The swap will use USDC, but we need ETH for gas fees
-      const currentBalance = await publicClient.getBalance({
-        address: smartAccount.address,
-      });
+      // Note: Gas fees are sponsored by Pimlico paymaster (configured with paymaster: true)
+      // No need to fund session account with ETH for gas
+      this.logger.log(`Gas fees will be sponsored by Pimlico paymaster`);
 
-      this.logger.log(`Current smart account balance: ${currentBalance} wei (${Number(currentBalance) / 1e18} ETH)`);
+      // TODO: Remove this code block once paymaster is confirmed working
+      // // The swap will use USDC, but we need ETH for gas fees
+      // const currentBalance = await publicClient.getBalance({
+      //   address: smartAccount.address,
+      // });
 
-      // Calculate gas needed (not swap amount, since we're using USDC)
-      const gasBuffer = BigInt(5000000000000000); // 0.005 ETH for gas (UserOp fees)
+      // this.logger.log(`Current smart account balance: ${currentBalance} wei (${Number(currentBalance) / 1e18} ETH)`);
 
-      this.logger.log(`Gas buffer needed: ${gasBuffer} wei (${Number(gasBuffer) / 1e18} ETH)`);
+      // // Calculate gas needed (not swap amount, since we're using USDC)
+      // const gasBuffer = BigInt(5000000000000000); // 0.005 ETH for gas (UserOp fees)
 
-      // Only fund ETH if balance is insufficient for gas
-      if (currentBalance < gasBuffer) {
-        if (!ethPermission) {
-          throw new Error('No ETH permission found. Cannot fund session account for gas fees.');
-        }
-        const fundingAmount = gasBuffer - currentBalance;
-        this.logger.log(`Insufficient ETH for gas. Funding ${fundingAmount} wei using delegation...`);
+      // this.logger.log(`Gas buffer needed: ${gasBuffer} wei (${Number(gasBuffer) / 1e18} ETH)`);
 
-        await this.fundSessionAccountWithETH(
-          smartAccount,
-          fundingAmount,
-          ethPermission,
-          publicClient,
-        );
+      // // Only fund ETH if balance is insufficient for gas
+      // if (currentBalance < gasBuffer) {
+      //   if (!ethPermission) {
+      //     throw new Error('No ETH permission found. Cannot fund session account for gas fees.');
+      //   }
+      //   const fundingAmount = gasBuffer - currentBalance;
+      //   this.logger.log(`Insufficient ETH for gas. Funding ${fundingAmount} wei using delegation...`);
 
-        this.logger.log(`Session account funded with ${fundingAmount} wei for gas`);
-      } else {
-        this.logger.log(`✅ Sufficient ETH balance for gas fees. Skipping ETH funding step.`);
-      }
+      //   await this.fundSessionAccountWithETH(
+      //     smartAccount,
+      //     fundingAmount,
+      //     ethPermission,
+      //     publicClient,
+      //   );
+
+      //   this.logger.log(`Session account funded with ${fundingAmount} wei for gas`);
+      // } else {
+      //   this.logger.log(`✅ Sufficient ETH balance for gas fees. Skipping ETH funding step.`);
+      // }
 
       // 8. STEP 2: Transfer USDC from user's EOA to session account using delegation
       const usdcAddress = this.uniswapV3.getUsdcAddress();
@@ -270,18 +275,30 @@ export class ExecutionService {
         swapTx.value,
       );
 
-      // 8. Update execution record
+      // 8. Fetch actual swap amounts from transaction receipt
+      const { actualUsdcIn, actualWethOut, actualPrice } = await this.getSwapAmountsFromTx(
+        txHash,
+        publicClient,
+      );
+
+      // 9. Update execution record with actual amounts
       await this.prisma.execution.update({
         where: { id: executionId },
         data: {
           status: 'executed',
           txHash,
           executedAt: new Date(),
+          usdcAmountIn: actualUsdcIn?.toString(),
+          wethAmountOut: actualWethOut?.toString(),
+          executionPrice: actualPrice,
         },
       });
 
       this.logger.log(
         `✅ Execution successful! TxHash: ${txHash}`,
+      );
+      this.logger.log(
+        `   USDC spent: ${actualUsdcIn ? Number(actualUsdcIn) / 1e6 : 'N/A'} | WETH received: ${actualWethOut ? Number(actualWethOut) / 1e18 : 'N/A'} | Price: $${actualPrice || 'N/A'}`,
       );
 
       return { success: true, txHash };
@@ -618,6 +635,7 @@ export class ExecutionService {
             timeout: 60_000, // 60 seconds timeout (Sepolia has slower block times)
           }
         ),
+        paymaster: true,
       });
 
       // Import sendUserOperation from viem
@@ -717,6 +735,7 @@ export class ExecutionService {
             timeout: 60_000,
           }
         ),
+        paymaster: true,
       });
 
       // Import viem functions
@@ -787,5 +806,75 @@ export class ExecutionService {
       calldata.slice(recipientStartHex + 64);
 
     return updated as `0x${string}`;
+  }
+
+  /**
+   * Extract actual swap amounts from transaction receipt logs
+   * Looks for Transfer events from USDC and WETH contracts
+   */
+  private async getSwapAmountsFromTx(
+    txHash: Hash,
+    publicClient: any,
+  ): Promise<{
+    actualUsdcIn: bigint | null;
+    actualWethOut: bigint | null;
+    actualPrice: number | null;
+  }> {
+    try {
+      const { keccak256, toHex } = await import('viem');
+
+      // Get transaction receipt
+      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
+      // ERC20 Transfer event signature: keccak256("Transfer(address,address,uint256)")
+      const transferEventTopic = keccak256(toHex('Transfer(address,address,uint256)'));
+
+      const USDC_ADDRESS = this.config.get('blockchain.usdcAddress') as Address;
+      const WETH_ADDRESS = this.config.get('blockchain.wethAddress') as Address;
+
+      let usdcAmount: bigint | null = null;
+      let wethAmount: bigint | null = null;
+
+      // Parse logs to find Transfer events
+      for (const log of receipt.logs) {
+        // Check if this is a Transfer event
+        if (log.topics[0] === transferEventTopic) {
+          const value = BigInt(log.data);
+
+          // Check if it's from USDC contract (user spending USDC)
+          if (log.address.toLowerCase() === USDC_ADDRESS.toLowerCase()) {
+            usdcAmount = value;
+            this.logger.log(`Found USDC Transfer: ${Number(value) / 1e6} USDC`);
+          }
+
+          // Check if it's from WETH contract (user receiving WETH)
+          if (log.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
+            wethAmount = value;
+            this.logger.log(`Found WETH Transfer: ${Number(value) / 1e18} WETH`);
+          }
+        }
+      }
+
+      // Calculate actual execution price if both amounts are available
+      let actualPrice: number | null = null;
+      if (usdcAmount && wethAmount && wethAmount > 0n) {
+        // Price = USDC spent / WETH received
+        // Convert to readable format: (USDC / 1e6) / (WETH / 1e18) = (USDC * 1e18) / (WETH * 1e6) / 1e12
+        actualPrice = Number((usdcAmount * BigInt(1e12)) / wethAmount) / 1e6;
+      }
+
+      return {
+        actualUsdcIn: usdcAmount,
+        actualWethOut: wethAmount,
+        actualPrice,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to extract swap amounts from tx: ${error.message}`);
+      return {
+        actualUsdcIn: null,
+        actualWethOut: null,
+        actualPrice: null,
+      };
+    }
   }
 }
