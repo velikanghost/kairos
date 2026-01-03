@@ -9,7 +9,6 @@ import {
   Clock,
   DollarSign,
   MoreVertical,
-  ExternalLink,
 } from 'lucide-react'
 
 const BACKEND_URL =
@@ -27,26 +26,10 @@ interface Strategy {
   router: string
 }
 
-interface Execution {
-  id: string
-  status: string
-  recommendedAmount: string
-  price: number
-  volatility: number
-  liquidityScore: number
-  trend: string
-  txHash?: string
-  errorMessage?: string
-  createdAt: string
-  executedAt?: string
-}
-
 export default function StrategyList({ refreshTrigger }: { refreshTrigger?: number }) {
   const { address } = useAccount()
   const { executionUpdateTrigger } = useNotifications()
   const [strategies, setStrategies] = useState<Strategy[]>([])
-  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
-  const [executions, setExecutions] = useState<Execution[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,11 +51,6 @@ export default function StrategyList({ refreshTrigger }: { refreshTrigger?: numb
 
       const data = await response.json()
       setStrategies(data)
-
-      // Auto-expand if there's only one strategy
-      if (data.length === 1) {
-        setSelectedStrategy(data[0].id)
-      }
     } catch (err) {
       console.error('Error fetching strategies:', err)
       const errorMsg =
@@ -91,34 +69,6 @@ export default function StrategyList({ refreshTrigger }: { refreshTrigger?: numb
     const interval = setInterval(fetchStrategies, 30000)
     return () => clearInterval(interval)
   }, [fetchStrategies, executionUpdateTrigger, refreshTrigger])
-
-  // Fetch executions for selected strategy
-  useEffect(() => {
-    if (!selectedStrategy) return
-
-    const fetchExecutions = async () => {
-      try {
-        const response = await fetch(
-          `${BACKEND_URL}/strategies/${selectedStrategy}/executions`,
-        )
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch executions')
-        }
-
-        const data = await response.json()
-        setExecutions(data)
-      } catch (err) {
-        console.error('Error fetching executions:', err)
-      }
-    }
-
-    fetchExecutions()
-
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchExecutions, 10000)
-    return () => clearInterval(interval)
-  }, [selectedStrategy, executionUpdateTrigger])
 
   const toggleStrategy = async (strategyId: string, currentStatus: boolean) => {
     try {
@@ -227,21 +177,10 @@ export default function StrategyList({ refreshTrigger }: { refreshTrigger?: numb
         {strategies.map((strategy) => (
           <div
             key={strategy.id}
-            className={`bg-slate-900 border rounded-xl overflow-hidden transition-all ${
-              selectedStrategy === strategy.id
-                ? 'border-indigo-500/50 shadow-lg shadow-indigo-500/10'
-                : 'border-slate-800 hover:border-slate-700'
-            }`}
+            className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden transition-all hover:border-slate-700"
           >
             {/* Strategy Header */}
-            <div
-              className="p-5 cursor-pointer"
-              onClick={() =>
-                setSelectedStrategy(
-                  selectedStrategy === strategy.id ? null : strategy.id,
-                )
-              }
-            >
+            <div className="p-5">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   {/* Pair Title */}
@@ -314,144 +253,6 @@ export default function StrategyList({ refreshTrigger }: { refreshTrigger?: numb
                 </div>
               </div>
             </div>
-
-            {/* Execution History - Expandable */}
-            {selectedStrategy === strategy.id && (
-              <div className="border-t border-slate-800 bg-slate-950/50 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-semibold text-white">
-                    Execution History
-                  </h4>
-                  <span className="text-xs text-gray-500">
-                    {executions.length} total
-                  </span>
-                </div>
-
-                {executions.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-8">
-                    No executions yet
-                  </p>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {executions.map((exec) => (
-                      <div
-                        key={exec.id}
-                        className="bg-slate-900 border border-slate-800 rounded-lg p-4 hover:border-slate-700 transition-colors"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            {/* Status Badge */}
-                            <div className="flex items-center space-x-2 mb-2">
-                              {exec.status === 'executed' ? (
-                                <>
-                                  <div className="h-2 w-2 bg-emerald-400 rounded-full"></div>
-                                  <span className="text-sm font-medium text-emerald-400">
-                                    Success
-                                  </span>
-                                </>
-                              ) : exec.status === 'failed' ? (
-                                <>
-                                  <div className="h-2 w-2 bg-red-400 rounded-full"></div>
-                                  <span className="text-sm font-medium text-red-400">
-                                    Failed
-                                  </span>
-                                </>
-                              ) : exec.status === 'skipped' ? (
-                                <>
-                                  <div className="h-2 w-2 bg-amber-400 rounded-full"></div>
-                                  <span className="text-sm font-medium text-amber-400">
-                                    Skipped
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="h-2 w-2 bg-blue-400 rounded-full"></div>
-                                  <span className="text-sm font-medium text-blue-400">
-                                    {exec.status}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Amount */}
-                            <p className="text-white font-mono mb-2">
-                              {formatAmount(
-                                exec.recommendedAmount,
-                                strategy.pairId,
-                              )}{' '}
-                              {getAmountLabel(strategy.pairId)}
-                            </p>
-
-                            {/* Market Metrics */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                              <div>
-                                <span className="text-gray-500">Price</span>
-                                <p className="text-gray-300 font-mono">
-                                  ${exec.price.toFixed(2)}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">
-                                  Volatility
-                                </span>
-                                <p className="text-gray-300 font-mono">
-                                  {exec.volatility.toFixed(2)}%
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Liquidity</span>
-                                <p className="text-gray-300 font-mono">
-                                  {exec.liquidityScore.toFixed(2)}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Trend</span>
-                                <p
-                                  className={`font-mono capitalize ${
-                                    exec.trend === 'bullish'
-                                      ? 'text-emerald-400'
-                                      : exec.trend === 'bearish'
-                                      ? 'text-red-400'
-                                      : 'text-gray-400'
-                                  }`}
-                                >
-                                  {exec.trend}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Transaction Link */}
-                            {exec.txHash && (
-                              <a
-                                href={`https://sepolia.etherscan.io/tx/${exec.txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center space-x-1 mt-3 text-xs text-indigo-400 hover:text-indigo-300"
-                              >
-                                <span>View Transaction</span>
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-
-                            {/* Error Message */}
-                            {exec.errorMessage && (
-                              <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
-                                {formatErrorMessage(exec.errorMessage)}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Timestamp */}
-                          <span className="text-xs text-gray-500 ml-4">
-                            {formatDate(exec.createdAt)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         ))}
       </div>

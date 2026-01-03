@@ -4,6 +4,7 @@ import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Header from "@/components/Header";
+import PnLChart from "@/components/PnLChart";
 import PortfolioOverview from "@/components/PortfolioOverview";
 import { useSessionAccount } from "@/providers/SessionAccountProvider";
 
@@ -37,8 +38,14 @@ export default function PortfolioPage() {
 
           {/* Portfolio Content */}
           {sessionAccountAddress ? (
-            <div className="max-w-4xl">
-              <PortfolioOverview sessionAccountAddress={sessionAccountAddress} />
+            <div className="space-y-8">
+              {/* PnL Chart */}
+              <PnLChart sessionAccountAddress={sessionAccountAddress} />
+
+              {/* Portfolio Overview */}
+              <div className="max-w-4xl">
+                <PortfolioOverview sessionAccountAddress={sessionAccountAddress} />
+              </div>
             </div>
           ) : (
             <div className="rounded-xl border border-slate-700/50 bg-slate-900/30 p-12 text-center">
