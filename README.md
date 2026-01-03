@@ -2,9 +2,6 @@
 
 **SmartDCA with Predictive Market Intelligence** — Automated Dollar-Cost Averaging powered by MetaMask Advanced Permissions (ERC-7715/7710) and Envio HyperIndex.
 
-![TypeScript](https://img.shields.io/badge/TypeScript-99.2%25-blue)
-![License](https://img.shields.io/badge/license-UNLICENSED-red)
-
 ## Overview
 
 Kairos is an intelligent DCA (Dollar-Cost Averaging) trading bot that allows users to set up automated trading strategies without signing each transaction manually. By leveraging **MetaMask Advanced Permissions**, users grant time-limited, capped allowances to a session account that executes trades on their behalf.
