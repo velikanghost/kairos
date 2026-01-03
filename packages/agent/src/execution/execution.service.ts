@@ -287,14 +287,29 @@ export class ExecutionService {
         publicClient,
       );
 
-      // 10. Update execution record with actual amounts and execution price
+      // 10. Calculate actual USDC equivalent of WETH received
+      // This is what we'll use for portfolio calculations (more accurate than actualUsdcIn from logs)
+      let actualUsdcEquivalent: bigint | null = null;
+      if (actualWethOut && currentEthPrice) {
+        // WETH has 18 decimals, USDC has 6 decimals
+        // wethAmount (18 decimals) * ethPrice / 1e12 = usdcAmount (6 decimals)
+        const wethInEth = Number(actualWethOut) / 1e18; // Convert to ETH
+        const usdcEquivalent = wethInEth * currentEthPrice; // Calculate USD value
+        actualUsdcEquivalent = BigInt(Math.floor(usdcEquivalent * 1e6)); // Convert to USDC units (6 decimals)
+
+        this.logger.log(
+          `💰 Calculated USDC equivalent: ${usdcEquivalent.toFixed(6)} USDC (${wethInEth.toFixed(8)} WETH × $${currentEthPrice.toFixed(2)})`
+        );
+      }
+
+      // 11. Update execution record with actual amounts and execution price
       await this.prisma.execution.update({
         where: { id: executionId },
         data: {
           status: 'executed',
           txHash,
           executedAt: new Date(),
-          usdcAmountIn: actualUsdcIn?.toString(),
+          usdcAmountIn: actualUsdcEquivalent?.toString() || actualUsdcIn?.toString(), // Prefer calculated USDC equivalent
           wethAmountOut: actualWethOut?.toString(),
           executionPrice: currentEthPrice, // Use Pyth price at execution time
         },
@@ -304,7 +319,7 @@ export class ExecutionService {
         `✅ Execution successful! TxHash: ${txHash}`,
       );
       this.logger.log(
-        `   USDC spent: ${actualUsdcIn ? Number(actualUsdcIn) / 1e6 : 'N/A'} | WETH received: ${actualWethOut ? Number(actualWethOut) / 1e18 : 'N/A'} | ETH Price: $${currentEthPrice.toFixed(2)}`,
+        `   USDC equivalent: ${actualUsdcEquivalent ? Number(actualUsdcEquivalent) / 1e6 : 'N/A'} | WETH received: ${actualWethOut ? Number(actualWethOut) / 1e18 : 'N/A'} | ETH Price: $${currentEthPrice.toFixed(2)}`,
       );
 
       return { success: true, txHash };
