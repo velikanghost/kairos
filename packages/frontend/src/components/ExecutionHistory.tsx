@@ -38,6 +38,10 @@ export default function ExecutionHistory() {
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'executed' | 'failed' | 'pending'
   >('all')
+  const [nextExecutionTime, setNextExecutionTime] = useState<string | null>(
+    null,
+  )
+  const [countdown, setCountdown] = useState('')
 
   const fetchExecutionHistory = useCallback(async () => {
     try {
@@ -54,6 +58,17 @@ export default function ExecutionHistory() {
       }
 
       const strategies = await strategiesResponse.json()
+
+      // Get next execution time from active strategies
+      const activeTimes = strategies
+        .filter((s: any) => s.isActive)
+        .map((s: any) => new Date(s.nextCheckTime).getTime())
+        .filter((t: number) => !isNaN(t))
+      setNextExecutionTime(
+        activeTimes.length > 0
+          ? new Date(Math.min(...activeTimes)).toISOString()
+          : null,
+      )
 
       // Fetch executions for each strategy
       const allExecutions: (Execution & { strategy?: Strategy })[] = []
@@ -109,6 +124,30 @@ export default function ExecutionHistory() {
 
     return () => clearInterval(interval)
   }, [address, fetchExecutionHistory, executionUpdateTrigger])
+
+  // Countdown timer
+  useEffect(() => {
+    const update = () => {
+      if (!nextExecutionTime) {
+        setCountdown('')
+        return
+      }
+      const diff = new Date(nextExecutionTime).getTime() - Date.now()
+      if (diff <= 0) {
+        setCountdown('Running...')
+        return
+      }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setCountdown(
+        h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`,
+      )
+    }
+    update()
+    const i = setInterval(update, 1000)
+    return () => clearInterval(i)
+  }, [nextExecutionTime])
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A'
@@ -188,9 +227,17 @@ export default function ExecutionHistory() {
             <option value="pending">Pending</option>
           </select>
         </div>
-        <div className="text-sm text-gray-400">
-          {filteredExecutions.length}{' '}
-          {filteredExecutions.length === 1 ? 'execution' : 'executions'}
+        <div className="flex items-center space-x-4 text-sm text-gray-400">
+          <span>
+            {filteredExecutions.length}{' '}
+            {filteredExecutions.length === 1 ? 'execution' : 'executions'}
+          </span>
+          {countdown && (
+            <span className="flex items-center space-x-1 text-amber-400">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Next: {countdown}</span>
+            </span>
+          )}
         </div>
       </div>
 
