@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Header from "@/components/Header";
 import StatsOverview from "@/components/StatsOverview";
-import PortfolioOverview from "@/components/PortfolioOverview";
+import PnLChart from "@/components/PnLChart";
 import { useSessionAccount } from "@/providers/SessionAccountProvider";
 
 export default function OverviewPage() {
@@ -39,11 +39,9 @@ export default function OverviewPage() {
           {/* Stats Grid */}
           <StatsOverview />
 
-          {/* Portfolio Overview */}
+          {/* PnL Chart */}
           {sessionAccountAddress && (
-            <div className="max-w-4xl">
-              <PortfolioOverview sessionAccountAddress={sessionAccountAddress} />
-            </div>
+            <PnLChart sessionAccountAddress={sessionAccountAddress} />
           )}
         </div>
       </main>

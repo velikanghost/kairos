@@ -1,25 +1,26 @@
-"use client";
+'use client'
 
-import { useAccount } from "wagmi";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import Header from "@/components/Header";
-import PortfolioOverview from "@/components/PortfolioOverview";
-import { useSessionAccount } from "@/providers/SessionAccountProvider";
+import { useAccount } from 'wagmi'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import Header from '@/components/Header'
+import PnLChart from '@/components/PnLChart'
+import PortfolioOverview from '@/components/PortfolioOverview'
+import { useSessionAccount } from '@/providers/SessionAccountProvider'
 
 export default function PortfolioPage() {
-  const { isConnected } = useAccount();
-  const router = useRouter();
-  const { sessionAccountAddress } = useSessionAccount();
+  const { isConnected } = useAccount()
+  const router = useRouter()
+  const { sessionAccountAddress } = useSessionAccount()
 
   useEffect(() => {
     if (!isConnected) {
-      router.push("/");
+      router.push('/')
     }
-  }, [isConnected, router]);
+  }, [isConnected, router])
 
   if (!isConnected) {
-    return null;
+    return null
   }
 
   return (
@@ -37,8 +38,13 @@ export default function PortfolioPage() {
 
           {/* Portfolio Content */}
           {sessionAccountAddress ? (
-            <div className="max-w-4xl">
-              <PortfolioOverview sessionAccountAddress={sessionAccountAddress} />
+            <div className="space-y-8">
+              <PortfolioOverview
+                sessionAccountAddress={sessionAccountAddress}
+              />
+
+              {/* PnL Chart */}
+              <PnLChart sessionAccountAddress={sessionAccountAddress} />
             </div>
           ) : (
             <div className="rounded-xl border border-slate-700/50 bg-slate-900/30 p-12 text-center">
@@ -50,5 +56,5 @@ export default function PortfolioPage() {
         </div>
       </main>
     </div>
-  );
+  )
 }

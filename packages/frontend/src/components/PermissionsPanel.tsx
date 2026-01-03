@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { usePermissions } from '@/providers/PermissionProvider'
-import GrantPermissionsButton from './GrantPermissionsButton'
 import { Shield, ChevronDown, ChevronRight, Info } from 'lucide-react'
 
 export default function PermissionsPanel() {
@@ -80,18 +79,16 @@ export default function PermissionsPanel() {
 
       {/* Expandable Section */}
       {isExpanded && (
-        <div className="space-y-4 border-t border-slate-800/50 pt-4">
+        <div className="border-t border-slate-800/50 pt-4">
           <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 p-4">
             <p className="flex items-start space-x-3 text-sm text-gray-400">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
               <span>
-                If you're seeing "allowance exceeded" errors, grant a new
+                If you're seeing "allowance exceeded" errors, use the form below to grant a new
                 permission with a higher amount
               </span>
             </p>
           </div>
-
-          <GrantPermissionsButton />
         </div>
       )}
 
@@ -100,7 +97,7 @@ export default function PermissionsPanel() {
           onClick={() => setIsExpanded(true)}
           className="mt-2 w-full text-sm text-gray-400 transition-colors hover:text-white"
         >
-          Update Allowance →
+          View Details →
         </button>
       )}
     </div>
