@@ -89,8 +89,15 @@ export default function GrantPermissionsButton() {
 
       const grantedPermission = permissions[0]
 
-      // Save to frontend state
-      savePermission(grantedPermission)
+      // Save to frontend state with metadata
+      const expiryDate = new Date(expiry * 1000)
+      savePermission(
+        grantedPermission,
+        expiryDate,
+        permissionType === 'usdc'
+          ? 'erc20-token-periodic'
+          : 'native-token-periodic',
+      )
 
       // Send permission to backend to store in database
       console.log('Sending permission to backend:', grantedPermission)

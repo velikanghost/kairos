@@ -3,25 +3,48 @@
 import { useState } from 'react'
 import { usePermissions } from '@/providers/PermissionProvider'
 import { Shield, ChevronDown, ChevronRight, Info } from 'lucide-react'
+import { formatUnits } from 'viem'
 
 export default function PermissionsPanel() {
-  const { permission } = usePermissions()
+  const { permission, permissionMetadata } = usePermissions()
   const [isExpanded, setIsExpanded] = useState(false)
 
-  // Parse permission data if available
+  // Parse permission data from the actual permission object
   const getPermissionDetails = () => {
     if (!permission) return null
 
     try {
       const permissionData = permission as any
-      // This is a simplified version - adjust based on your actual permission structure
+
+      // Extract the permission type and amount from the nested structure
+      // Structure: permission.permission.type and permission.permission.data.periodAmount
+      const permissionInfo = permissionData.permission
+      if (!permissionInfo) return null
+
+      const isErc20 = permissionInfo.type === 'erc20-token-periodic'
+      const isNative = permissionInfo.type === 'native-token-periodic'
+
+      // Get period amount (stored as bigint/string in wei)
+      const periodAmount = permissionInfo.data?.periodAmount
+      if (!periodAmount) return null
+
+      // Convert from wei to human-readable
+      // USDC has 6 decimals, ETH has 18 decimals
+      const decimals = isErc20 ? 6 : 18
+      const dailyLimit = Number(formatUnits(BigInt(periodAmount), decimals))
+
+      // Determine token type
+      const tokenType = isErc20 ? 'USDC' : isNative ? 'ETH' : 'Unknown'
+
       return {
-        type: 'USDC',
-        dailyLimit: 50, // You'll need to extract this from permission.signerMeta
-        used: 0, // Track this from executions
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Example
+        type: tokenType,
+        dailyLimit,
+        expiresAt: permissionMetadata.expiresAt,
+        permissionType:
+          permissionMetadata.permissionType || permissionInfo.type,
       }
-    } catch {
+    } catch (err) {
+      console.error('Error parsing permission details:', err)
       return null
     }
   }
@@ -48,7 +71,9 @@ export default function PermissionsPanel() {
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-gray-400 transition-colors hover:text-white"
-          aria-label={isExpanded ? 'Collapse permissions' : 'Expand permissions'}
+          aria-label={
+            isExpanded ? 'Collapse permissions' : 'Expand permissions'
+          }
         >
           {isExpanded ? (
             <ChevronDown className="h-5 w-5" />
@@ -64,7 +89,9 @@ export default function PermissionsPanel() {
           <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
             <p className="mb-1 text-xs text-gray-500">Daily Limit</p>
             <p className="text-lg font-bold text-white">
-              {details.dailyLimit} USDC
+              {details.type === 'USDC'
+                ? `${details.dailyLimit.toFixed(2)} ${details.type}`
+                : `${details.dailyLimit.toFixed(6)} ${details.type}`}
             </p>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
@@ -73,6 +100,11 @@ export default function PermissionsPanel() {
               <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400"></div>
               <p className="text-sm font-semibold text-emerald-400">Active</p>
             </div>
+            {details.expiresAt && (
+              <p className="mt-1 text-xs text-gray-500">
+                Expires {details.expiresAt.toLocaleDateString()}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -84,8 +116,8 @@ export default function PermissionsPanel() {
             <p className="flex items-start space-x-3 text-sm text-gray-400">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
               <span>
-                If you're seeing "allowance exceeded" errors, use the form below to grant a new
-                permission with a higher amount
+                If you're seeing "allowance exceeded" errors, use the form below
+                to grant a new permission with a higher amount
               </span>
             </p>
           </div>

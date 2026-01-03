@@ -11,9 +11,15 @@ import { RequestExecutionPermissionsReturnType } from "@metamask/smart-accounts-
 
 export type Permission = NonNullable<RequestExecutionPermissionsReturnType>[number];
 
+interface PermissionMetadata {
+  expiresAt: Date | null;
+  permissionType: string | null;
+}
+
 interface PermissionContextType {
   permission: Permission | null;
-  savePermission: (permission: Permission) => void;
+  permissionMetadata: PermissionMetadata;
+  savePermission: (permission: Permission, expiresAt?: Date, permissionType?: string) => void;
   fetchPermission: () => Permission | null;
   removePermission: () => void;
   isLoading: boolean;
@@ -21,6 +27,7 @@ interface PermissionContextType {
 
 export const PermissionContext = createContext<PermissionContextType>({
   permission: null,
+  permissionMetadata: { expiresAt: null, permissionType: null },
   savePermission: () => {},
   fetchPermission: () => null,
   removePermission: () => {},
@@ -35,6 +42,10 @@ export const PermissionProvider = ({
   children: React.ReactNode;
 }) => {
   const [permission, setPermission] = useState<Permission | null>(null);
+  const [permissionMetadata, setPermissionMetadata] = useState<PermissionMetadata>({
+    expiresAt: null,
+    permissionType: null,
+  });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { address: walletAddress } = useAccount();
 
@@ -43,6 +54,7 @@ export const PermissionProvider = ({
     const fetchExistingPermissions = async () => {
       if (!walletAddress) {
         setPermission(null);
+        setPermissionMetadata({ expiresAt: null, permissionType: null });
         return;
       }
 
@@ -63,6 +75,10 @@ export const PermissionProvider = ({
           if (activePermission && activePermission.permissionData) {
             // Convert the stored permission data back to the Permission type
             setPermission(activePermission.permissionData as Permission);
+            setPermissionMetadata({
+              expiresAt: new Date(activePermission.expiresAt),
+              permissionType: activePermission.permissionType,
+            });
             console.log('Loaded existing permission:', activePermission.permissionContext);
           }
         }
@@ -76,9 +92,15 @@ export const PermissionProvider = ({
     fetchExistingPermissions();
   }, [walletAddress]);
 
-  // Saves the permission to state and backend
-  const savePermission = (permisison: Permission) => {
-    setPermission(permisison);
+  // Saves the permission to state
+  const savePermission = (perm: Permission, expiresAt?: Date, permissionType?: string) => {
+    setPermission(perm);
+    if (expiresAt || permissionType) {
+      setPermissionMetadata({
+        expiresAt: expiresAt || null,
+        permissionType: permissionType || null,
+      });
+    }
   };
 
   // Fetches the permission from state
@@ -89,12 +111,14 @@ export const PermissionProvider = ({
   // Removes the permission from state
   const removePermission = () => {
     setPermission(null);
+    setPermissionMetadata({ expiresAt: null, permissionType: null });
   };
 
   return (
     <PermissionContext.Provider
       value={{
         permission,
+        permissionMetadata,
         savePermission,
         fetchPermission,
         removePermission,
