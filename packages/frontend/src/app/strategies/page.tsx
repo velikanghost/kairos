@@ -40,15 +40,15 @@ export default function StrategiesPage() {
             </p>
           </div>
 
-          {/* Two Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Balanced Two Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Create Strategy Form */}
-            <div className="lg:col-span-1">
+            <div>
               <CreateStrategyForm onSuccess={handleStrategyCreated} />
             </div>
 
             {/* Strategy List */}
-            <div className="lg:col-span-2">
+            <div>
               <StrategyList refreshTrigger={refreshTrigger} />
             </div>
           </div>
