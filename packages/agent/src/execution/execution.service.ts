@@ -5,6 +5,7 @@ import { EncryptionService } from '../common/encryption.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { SessionAccountService } from '../session-account/session-account.service';
 import { UniswapV3Service } from '../common/services/uniswap-v3.service';
+import { PythOracleService } from '../common/services/pyth-oracle.service';
 import {
   createPublicClient,
   http,
@@ -41,6 +42,7 @@ export class ExecutionService {
     private permissions: PermissionsService,
     private sessionAccounts: SessionAccountService,
     private uniswapV3: UniswapV3Service,
+    private pythOracleService: PythOracleService,
   ) {}
 
   /**
@@ -275,13 +277,17 @@ export class ExecutionService {
         swapTx.value,
       );
 
-      // 8. Fetch actual swap amounts from transaction receipt
-      const { actualUsdcIn, actualWethOut, actualPrice } = await this.getSwapAmountsFromTx(
+      // 8. Fetch current ETH price from Pyth at execution time
+      const currentEthPrice = await this.pythOracleService.getPrice('ETH/USD');
+      this.logger.log(`ETH price at execution: $${currentEthPrice.toFixed(2)}`);
+
+      // 9. Fetch actual swap amounts from transaction receipt
+      const { actualUsdcIn, actualWethOut } = await this.getSwapAmountsFromTx(
         txHash,
         publicClient,
       );
 
-      // 9. Update execution record with actual amounts
+      // 10. Update execution record with actual amounts and execution price
       await this.prisma.execution.update({
         where: { id: executionId },
         data: {
@@ -290,7 +296,7 @@ export class ExecutionService {
           executedAt: new Date(),
           usdcAmountIn: actualUsdcIn?.toString(),
           wethAmountOut: actualWethOut?.toString(),
-          executionPrice: actualPrice,
+          executionPrice: currentEthPrice, // Use Pyth price at execution time
         },
       });
 
@@ -298,7 +304,7 @@ export class ExecutionService {
         `✅ Execution successful! TxHash: ${txHash}`,
       );
       this.logger.log(
-        `   USDC spent: ${actualUsdcIn ? Number(actualUsdcIn) / 1e6 : 'N/A'} | WETH received: ${actualWethOut ? Number(actualWethOut) / 1e18 : 'N/A'} | Price: $${actualPrice || 'N/A'}`,
+        `   USDC spent: ${actualUsdcIn ? Number(actualUsdcIn) / 1e6 : 'N/A'} | WETH received: ${actualWethOut ? Number(actualWethOut) / 1e18 : 'N/A'} | ETH Price: $${currentEthPrice.toFixed(2)}`,
       );
 
       return { success: true, txHash };
@@ -818,25 +824,33 @@ export class ExecutionService {
   ): Promise<{
     actualUsdcIn: bigint | null;
     actualWethOut: bigint | null;
-    actualPrice: number | null;
   }> {
     try {
       const { keccak256, toHex } = await import('viem');
 
+      this.logger.log(`Fetching transaction receipt for: ${txHash}`);
+
       // Get transaction receipt
       const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
+      this.logger.log(`Receipt status: ${receipt.status}, logs count: ${receipt.logs?.length || 0}`);
 
       // ERC20 Transfer event signature: keccak256("Transfer(address,address,uint256)")
       const transferEventTopic = keccak256(toHex('Transfer(address,address,uint256)'));
 
-      const USDC_ADDRESS = this.config.get('blockchain.usdcAddress') as Address;
-      const WETH_ADDRESS = this.config.get('blockchain.wethAddress') as Address;
+      // Token addresses on Sepolia
+      const USDC_ADDRESS = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' as Address;
+      const WETH_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14' as Address;
+
+      this.logger.log(`Looking for transfers - USDC: ${USDC_ADDRESS}, WETH: ${WETH_ADDRESS}`);
 
       let usdcAmount: bigint | null = null;
       let wethAmount: bigint | null = null;
 
       // Parse logs to find Transfer events
       for (const log of receipt.logs) {
+        this.logger.debug(`Log ${log.logIndex}: address=${log.address}, topics[0]=${log.topics[0]}, data=${log.data}`);
+
         // Check if this is a Transfer event
         if (log.topics[0] === transferEventTopic) {
           const value = BigInt(log.data);
@@ -844,36 +858,33 @@ export class ExecutionService {
           // Check if it's from USDC contract (user spending USDC)
           if (log.address.toLowerCase() === USDC_ADDRESS.toLowerCase()) {
             usdcAmount = value;
-            this.logger.log(`Found USDC Transfer: ${Number(value) / 1e6} USDC`);
+            this.logger.log(`✅ Found USDC Transfer: ${Number(value) / 1e6} USDC`);
           }
 
           // Check if it's from WETH contract (user receiving WETH)
           if (log.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
             wethAmount = value;
-            this.logger.log(`Found WETH Transfer: ${Number(value) / 1e18} WETH`);
+            this.logger.log(`✅ Found WETH Transfer: ${Number(value) / 1e18} WETH`);
           }
         }
       }
 
-      // Calculate actual execution price if both amounts are available
-      let actualPrice: number | null = null;
-      if (usdcAmount && wethAmount && wethAmount > 0n) {
-        // Price = USDC spent / WETH received
-        // Convert to readable format: (USDC / 1e6) / (WETH / 1e18) = (USDC * 1e18) / (WETH * 1e6) / 1e12
-        actualPrice = Number((usdcAmount * BigInt(1e12)) / wethAmount) / 1e6;
+      if (!usdcAmount) {
+        this.logger.warn(`⚠️ No USDC Transfer found in transaction logs`);
+      }
+      if (!wethAmount) {
+        this.logger.warn(`⚠️ No WETH Transfer found in transaction logs`);
       }
 
       return {
         actualUsdcIn: usdcAmount,
         actualWethOut: wethAmount,
-        actualPrice,
       };
     } catch (error) {
-      this.logger.error(`Failed to extract swap amounts from tx: ${error.message}`);
+      this.logger.error(`Failed to extract swap amounts from tx: ${error.message}`, error.stack);
       return {
         actualUsdcIn: null,
         actualWethOut: null,
-        actualPrice: null,
       };
     }
   }

@@ -121,11 +121,20 @@ export class StrategiesService {
    * Activate strategy
    */
   async activate(id: string): Promise<DCAStrategy> {
+    // Fetch the strategy to get its frequency
+    const strategy = await this.prisma.dCAStrategy.findUnique({
+      where: { id },
+    });
+
+    if (!strategy) {
+      throw new Error('Strategy not found');
+    }
+
     return this.prisma.dCAStrategy.update({
       where: { id },
       data: {
         isActive: true,
-        nextCheckTime: this.calculateNextCheckTime('daily'), // Default to daily
+        nextCheckTime: this.calculateNextCheckTime(strategy.frequency),
       },
     });
   }

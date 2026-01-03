@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { Clock, ExternalLink, TrendingUp, Filter } from 'lucide-react'
+import { useNotifications } from '@/providers/NotificationsProvider'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
 
 interface Execution {
   id: string
@@ -28,23 +30,22 @@ interface Strategy {
 
 export default function ExecutionHistory() {
   const { address } = useAccount()
-  const [executions, setExecutions] = useState<(Execution & { strategy?: Strategy })[]>([])
+  const { executionUpdateTrigger } = useNotifications()
+  const [executions, setExecutions] = useState<
+    (Execution & { strategy?: Strategy })[]
+  >([])
   const [isLoading, setIsLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'executed' | 'failed' | 'pending'>('all')
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'executed' | 'failed' | 'pending'
+  >('all')
 
-  useEffect(() => {
-    if (address) {
-      fetchExecutionHistory()
-    }
-  }, [address])
-
-  const fetchExecutionHistory = async () => {
+  const fetchExecutionHistory = useCallback(async () => {
     try {
       setIsLoading(true)
 
       // Fetch all strategies
       const strategiesResponse = await fetch(
-        `${BACKEND_URL}/strategies/user/${address?.toLowerCase()}`
+        `${BACKEND_URL}/strategies/user/${address?.toLowerCase()}`,
       )
 
       if (!strategiesResponse.ok) {
@@ -59,22 +60,30 @@ export default function ExecutionHistory() {
 
       for (const strategy of strategies) {
         const execResponse = await fetch(
-          `${BACKEND_URL}/strategies/${strategy.id}/executions`
+          `${BACKEND_URL}/strategies/${strategy.id}/executions`,
         )
 
         if (execResponse.ok) {
           const executions = await execResponse.json()
-          allExecutions.push(...executions.map((e: Execution) => ({
-            ...e,
-            strategy
-          })))
+          console.log(`Strategy ${strategy.id} executions:`, executions)
+          allExecutions.push(
+            ...executions.map((e: Execution) => ({
+              ...e,
+              strategy,
+            })),
+          )
         }
+        console.log('All executions:', allExecutions)
       }
 
       // Sort by date (most recent first)
       allExecutions.sort((a, b) => {
-        const dateA = a.executedAt ? new Date(a.executedAt) : new Date(a.createdAt)
-        const dateB = b.executedAt ? new Date(b.executedAt) : new Date(b.createdAt)
+        const dateA = a.executedAt
+          ? new Date(a.executedAt)
+          : new Date(a.createdAt)
+        const dateB = b.executedAt
+          ? new Date(b.executedAt)
+          : new Date(b.createdAt)
         return dateB.getTime() - dateA.getTime()
       })
 
@@ -84,7 +93,22 @@ export default function ExecutionHistory() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [address])
+
+  useEffect(() => {
+    if (address) {
+      fetchExecutionHistory()
+    }
+
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      if (address) {
+        fetchExecutionHistory()
+      }
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [address, fetchExecutionHistory, executionUpdateTrigger])
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A'
@@ -130,9 +154,10 @@ export default function ExecutionHistory() {
     return status.charAt(0).toUpperCase() + status.slice(1)
   }
 
-  const filteredExecutions = statusFilter === 'all'
-    ? executions
-    : executions.filter(e => e.status === statusFilter)
+  const filteredExecutions =
+    statusFilter === 'all'
+      ? executions
+      : executions.filter((e) => e.status === statusFilter)
 
   if (isLoading) {
     return (
@@ -164,7 +189,8 @@ export default function ExecutionHistory() {
           </select>
         </div>
         <div className="text-sm text-gray-400">
-          {filteredExecutions.length} {filteredExecutions.length === 1 ? 'execution' : 'executions'}
+          {filteredExecutions.length}{' '}
+          {filteredExecutions.length === 1 ? 'execution' : 'executions'}
         </div>
       </div>
 
@@ -203,7 +229,9 @@ export default function ExecutionHistory() {
                       </span>
                     </div>
                     <span
-                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${getStatusColor(execution.status)}`}
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${getStatusColor(
+                        execution.status,
+                      )}`}
                     >
                       {getStatusLabel(execution.status)}
                     </span>
@@ -213,7 +241,9 @@ export default function ExecutionHistory() {
                   {execution.status === 'executed' && (
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <span className="text-gray-500 text-xs">USDC Spent</span>
+                        <span className="text-gray-500 text-xs">
+                          USDC Spent
+                        </span>
                         <p className="font-mono text-white mt-0.5">
                           {execution.usdcAmountIn
                             ? formatAmount(execution.usdcAmountIn, 6)
@@ -222,7 +252,9 @@ export default function ExecutionHistory() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-500 text-xs">WETH Received</span>
+                        <span className="text-gray-500 text-xs">
+                          WETH Received
+                        </span>
                         <p className="font-mono text-white mt-0.5">
                           {execution.wethAmountOut
                             ? formatAmount(execution.wethAmountOut, 18)
@@ -231,7 +263,9 @@ export default function ExecutionHistory() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-500 text-xs">Execution Price</span>
+                        <span className="text-gray-500 text-xs">
+                          Execution Price
+                        </span>
                         <p className="font-mono text-white mt-0.5">
                           {execution.executionPrice
                             ? formatCurrency(execution.executionPrice)
@@ -243,7 +277,9 @@ export default function ExecutionHistory() {
 
                   {execution.status === 'pending' && (
                     <div className="text-sm">
-                      <span className="text-gray-500 text-xs">Recommended Amount</span>
+                      <span className="text-gray-500 text-xs">
+                        Recommended Amount
+                      </span>
                       <p className="font-mono text-white mt-0.5">
                         {formatAmount(execution.recommendedAmount, 6)} USDC
                       </p>
