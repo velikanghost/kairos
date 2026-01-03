@@ -293,12 +293,6 @@ Built with [@MetaMaskDev](https://x.com/MetaMaskDev) Advanced Permissions (ERC-7
 
 ---
 
-## License
-
-UNLICENSED - Private use only
-
----
-
 ## Acknowledgments
 
 - [MetaMask](https://metamask.io/) — Advanced Permissions (ERC-7715/7710) and Smart Accounts Kit
