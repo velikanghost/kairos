@@ -3,7 +3,7 @@ import { IsString, IsNumber, IsOptional, IsBoolean, Min, Max } from 'class-valid
 export class UpdateStrategyDto {
   @IsString()
   @IsOptional()
-  frequency?: '5min' | 'hourly' | 'daily' | 'weekly';
+  frequency?: '1min' | '5min' | 'hourly' | 'daily' | 'weekly';
 
   @IsString()
   @IsOptional()
