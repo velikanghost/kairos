@@ -246,6 +246,22 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:3001"
 NEXT_PUBLIC_SEPOLIA_RPC_URL="https://rpc.sepolia.org"
 ```
 
+### Database Setup
+
+Run Prisma migrations to create the database tables:
+
+```bash
+cd packages/agent
+
+# Option 1: For fresh databases (recommended for new setups)
+npx prisma db push
+
+# Option 2: If migrations already exist in your database
+npx prisma migrate deploy
+
+cd ../..
+```
+
 ### Running the Project
 
 ```bash
