@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "Kairos - SmartDCA with Predictive Market Intelligence on Monad",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "indexer": "pnpm --filter @kairos/indexer",
     "agent": "pnpm --filter @kairos/agent",

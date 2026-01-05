@@ -193,6 +193,8 @@ export class StrategiesService {
     const now = new Date();
 
     switch (frequency) {
+      case '1min':
+        return new Date(now.getTime() + 1 * 60 * 1000); // +1 minute
       case '5min':
         return new Date(now.getTime() + 5 * 60 * 1000); // +5 minutes
       case 'hourly':

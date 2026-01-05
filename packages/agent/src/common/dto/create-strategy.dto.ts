@@ -11,7 +11,7 @@ export class CreateStrategyDto {
 
   @IsString()
   @IsNotEmpty()
-  frequency: '5min' | 'hourly' | 'daily' | 'weekly';
+  frequency: '1min' | '5min' | 'hourly' | 'daily' | 'weekly';
 
   @IsString()
   @IsNotEmpty()

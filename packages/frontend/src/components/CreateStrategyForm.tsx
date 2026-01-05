@@ -16,7 +16,7 @@ export default function CreateStrategyForm({ onSuccess }: { onSuccess?: () => vo
 
   const [formData, setFormData] = useState({
     pairId: "USDC/WETH",
-    frequency: "5min" as "5min" | "hourly" | "daily" | "weekly",
+    frequency: "1min" as "1min" | "5min" | "hourly" | "daily" | "weekly",
     baseAmount: "10",
     slippage: 0.5,
   });
@@ -75,7 +75,7 @@ export default function CreateStrategyForm({ onSuccess }: { onSuccess?: () => vo
       // Reset form
       setFormData({
         pairId: "USDC/WETH",
-        frequency: "5min",
+        frequency: "1min",
         baseAmount: "10",
         slippage: 0.5,
       });
@@ -142,7 +142,8 @@ export default function CreateStrategyForm({ onSuccess }: { onSuccess?: () => vo
           </label>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { value: "5min", label: "5 Min", badge: "Test" },
+              { value: "1min", label: "1 Min", badge: "Test" },
+              { value: "5min", label: "5 Min", badge: null },
               { value: "hourly", label: "Hourly", badge: null },
               { value: "daily", label: "Daily", badge: "Popular" },
               { value: "weekly", label: "Weekly", badge: null },
