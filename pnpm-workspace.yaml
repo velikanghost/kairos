@@ -1,2 +1,15 @@
 packages:
-  - 'packages/*'
+  - packages/*
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/engines'
+  - bufferutil
+  - dtrace-provider
+  - keccak
+  - prisma
+  - rescript
+  - sharp
+  - tiny-secp256k1
+  - unrs-resolver
+  - utf-8-validate
