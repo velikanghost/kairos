@@ -13,11 +13,8 @@ pnpm install
 # Set up environment
 cp .env.example .env
 
-# Start PostgreSQL (via Docker)
-docker-compose up -d
-
-# Run migrations
-npx prisma migrate dev
+# Set up database schema (required!)
+npx prisma db push
 
 # Start server
 pnpm start:dev
